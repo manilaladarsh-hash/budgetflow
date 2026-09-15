@@ -669,7 +669,11 @@
     <!-- MAIN SCRIPT -->
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef, useCallback } = React;
-        const GEMINI_MODEL = 'gemini-3.8-flash';
+        const GEMINI_MODELS = [
+            { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' },
+            { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite' },
+            { id: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash-Lite' }
+        ];
 
         // 🟢 FIREBASE CONFIG
         const firebaseConfig = {
@@ -815,6 +819,10 @@
             const [editForm, setEditForm] = useState({ name: '', limit: '', balance: '', icon: '' });
 
             const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('gemini_key') || '');
+            const [aiModel, setAiModel] = useState(() => {
+                const savedModel = localStorage.getItem('ai_model');
+                return GEMINI_MODELS.some(model => model.id === savedModel) ? savedModel : 'gemini-3.8-flash';
+            });
             const [chatHistory, setChatHistory] = useState([{ role: 'model', text: "Hi! I'm Gemini. I can analyze spending and track receipts! 📊" }]);
             const [chatInput, setChatInput] = useState('');
             const [isThinking, setIsThinking] = useState(false);
@@ -917,6 +925,7 @@
             useEffect(() => {
                 document.querySelectorAll('button:not([type])').forEach(button => { button.type = 'button'; });
             });
+            useEffect(() => { localStorage.setItem('ai_model', aiModel); }, [aiModel]);
             useEffect(() => () => clearTimeout(toastTimerRef.current), []);
             useEffect(() => {
                 const closeTopLayer = (event) => {
@@ -1130,7 +1139,7 @@
                 const body = { contents: [{ parts: [{ text: prompt }] }] };
                 if (b64) body.contents[0].parts.push({ inline_data: { mime_type: "image/jpeg", data: b64 } });
 
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${geminiKey}`, {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${aiModel}:generateContent?key=${geminiKey}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body)
@@ -2674,10 +2683,9 @@
                                     <label className="text-xs font-bold text-neon-purple uppercase mb-3 block flex items-center gap-2"><Icon name="key" size={12} /> Gemini API Key</label>
                                     <input type="password" value={geminiKey} onChange={e => { setGeminiKey(e.target.value); localStorage.setItem('gemini_key', e.target.value); }} placeholder="Paste Key..." className="w-full p-4 bg-black/50 border border-glass-200 rounded-xl text-white text-sm mb-4 font-mono focus:border-neon-purple transition-all" />
                                     <label className="text-xs font-bold text-neon-purple uppercase mb-3 block">AI Model</label>
-                                    <div className="w-full p-4 bg-black/50 border border-glass-200 rounded-xl text-white text-sm font-bold flex items-center justify-between">
-                                        <span>Gemini 3.8 Flash</span>
-                                        <Icon name="lock-keyhole" size={15} className="text-slate-500" />
-                                    </div>
+                                    <select value={aiModel} onChange={e => setAiModel(e.target.value)} className="w-full p-4 bg-black/50 border border-glass-200 rounded-xl text-white text-sm font-bold appearance-none">
+                                        {GEMINI_MODELS.map(model => <option key={model.id} value={model.id}>{model.label}</option>)}
+                                    </select>
                                 </div>
 
                                 <button onClick={handleTuneUp} className="w-full glass-card p-5 rounded-2xl text-neon-purple font-bold text-sm flex items-center justify-center gap-2 border-neon-purple/30 hover:bg-neon-purple/10 hover:scale-[1.02] transition-all"><Icon name="sliders" /> Auto-Tune Budget (Agent)</button>
