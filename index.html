@@ -669,6 +669,7 @@
     <!-- MAIN SCRIPT -->
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef, useCallback } = React;
+        const GEMINI_MODEL = 'gemini-3.8-flash';
 
         // 🟢 FIREBASE CONFIG
         const firebaseConfig = {
@@ -814,7 +815,6 @@
             const [editForm, setEditForm] = useState({ name: '', limit: '', balance: '', icon: '' });
 
             const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('gemini_key') || '');
-            const [aiModel, setAiModel] = useState(() => localStorage.getItem('ai_model') || 'gemini-3.5-flash');
             const [chatHistory, setChatHistory] = useState([{ role: 'model', text: "Hi! I'm Gemini. I can analyze spending and track receipts! 📊" }]);
             const [chatInput, setChatInput] = useState('');
             const [isThinking, setIsThinking] = useState(false);
@@ -1130,7 +1130,7 @@
                 const body = { contents: [{ parts: [{ text: prompt }] }] };
                 if (b64) body.contents[0].parts.push({ inline_data: { mime_type: "image/jpeg", data: b64 } });
 
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${aiModel}:generateContent?key=${geminiKey}`, {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${geminiKey}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body)
@@ -1294,7 +1294,7 @@
             const handleAdd = async (e) => {
                 e.preventDefault(); const c = categories.find(x => x.id === newTransaction.categoryId); if (!c) return;
                 const amt = parseFloat(newTransaction.amount); const isExp = (newTransaction.type || 'expense') === 'expense';
-                
+
                 // Check spending limits
                 if (isExp && txAlertThreshold > 0 && amt > txAlertThreshold && !limitOverrideRef.current) {
                     requestConfirm('Large transaction', `$${amt.toFixed(2)} is above your alert threshold of $${txAlertThreshold.toFixed(2)}. Save it anyway?`, async () => {
@@ -2540,8 +2540,8 @@
                                             <div className="flex gap-2 flex-wrap">
                                                 {availableTags.map(tag => (
                                                     <button key={tag} type="button" onClick={() => {
-                                                        const tags = newTransaction.tags.includes(tag) 
-                                                            ? newTransaction.tags.filter(t => t !== tag) 
+                                                        const tags = newTransaction.tags.includes(tag)
+                                                            ? newTransaction.tags.filter(t => t !== tag)
                                                             : [...newTransaction.tags, tag];
                                                         setNewTransaction({ ...newTransaction, tags });
                                                     }} className={`px-3 py-1 rounded-full text-xs font-bold transition-all border ${newTransaction.tags.includes(tag) ? 'bg-neon-purple/20 text-neon-purple border-neon-purple/30' : 'bg-glass-100 text-slate-500 border-glass-200'}`}>
@@ -2673,13 +2673,11 @@
                                 <div className="glass-card p-6 rounded-3xl border border-neon-purple/30 relative overflow-hidden">
                                     <label className="text-xs font-bold text-neon-purple uppercase mb-3 block flex items-center gap-2"><Icon name="key" size={12} /> Gemini API Key</label>
                                     <input type="password" value={geminiKey} onChange={e => { setGeminiKey(e.target.value); localStorage.setItem('gemini_key', e.target.value); }} placeholder="Paste Key..." className="w-full p-4 bg-black/50 border border-glass-200 rounded-xl text-white text-sm mb-4 font-mono focus:border-neon-purple transition-all" />
-                                    <label className="text-xs font-bold text-neon-purple uppercase mb-3 block">Model Version</label>
-                                    <select value={aiModel} onChange={e => { setAiModel(e.target.value); localStorage.setItem('ai_model', e.target.value); }} className="w-full p-4 bg-black/50 border border-glass-200 rounded-xl text-white text-sm font-bold appearance-none">
-                                        <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Preview)</option>
-                                        <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
-                                        <option value="gemini-3-flash-preview">Gemini 3.0 Flash (Preview)</option>
-                                        <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
-                                    </select>
+                                    <label className="text-xs font-bold text-neon-purple uppercase mb-3 block">AI Model</label>
+                                    <div className="w-full p-4 bg-black/50 border border-glass-200 rounded-xl text-white text-sm font-bold flex items-center justify-between">
+                                        <span>Gemini 3.8 Flash</span>
+                                        <Icon name="lock-keyhole" size={15} className="text-slate-500" />
+                                    </div>
                                 </div>
 
                                 <button onClick={handleTuneUp} className="w-full glass-card p-5 rounded-2xl text-neon-purple font-bold text-sm flex items-center justify-center gap-2 border-neon-purple/30 hover:bg-neon-purple/10 hover:scale-[1.02] transition-all"><Icon name="sliders" /> Auto-Tune Budget (Agent)</button>
