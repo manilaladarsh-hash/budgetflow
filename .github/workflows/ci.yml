@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Committed build matches source
+        run: |
+          if ! git diff --quiet -- index.html assets sw.js manifest.webmanifest; then
+            git status --short -- index.html assets sw.js manifest.webmanifest
+            echo "::error::Run 'npm run build' and commit the updated root files."
+            exit 1
+          fi
+          if [ -n "$(git ls-files --others --exclude-standard -- assets)" ]; then
+            echo "::error::New build assets are not committed. Run 'npm run build' and commit them."
+            exit 1
+          fi

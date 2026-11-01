@@ -1,49 +1,64 @@
 # BudgetFlow
 
-A personal budget tracker for organizing spending into envelopes, logging income and expenses, and seeing where your money goes. Built for desktop and mobile browsers.
+A calm, phone-first budget tracker. Split your money into weekly or monthly budgets, log what you spend, and let the app refill your budgets every Sunday. Unspent money partly rolls over. It works on phones, iPads and desktops, follows your light/dark setting, and keeps working offline.
 
-**[Open BudgetFlow](https://manilaladarsh-hash.github.io/budgetflow/)**
+**[Open BudgetFlow](https://manilaladarsh-hash.github.io/budgetflow/)**. On a phone, use *Add to Home Screen* to get an app-like icon.
 
 ## How to use
 
-1. **Set your budget:** on **Home**, customize the starter envelopes (Grocery, Shopping, Rent, and Phone) or add your own. Set each envelope's budget and available balance.
-2. **Record a transaction:** select **Add**, choose income or expense, enter an amount and category, then save. Add a description, date, or tags for easier tracking.
-3. **Check your progress:** use **Home** for available balances and **Stats** for spending charts and monthly comparisons.
-4. **Review your history:** open **Log** to search, filter, edit, or delete transactions.
-5. **Explore extras:** track savings goals, subscriptions, bills, assets and liabilities, and wishlist items. Weekly budget cycles renew automatically while the app is running or when it is reopened.
+- **Home:** shows how much is left across your budgets, what's safe to spend, this week's pace, bills that are coming up, and recent entries. Tap **−** on a budget to log an expense to it quickly. Tap the budget itself to see its history, edit it or pin it.
+- **＋ (Add):** log an expense or income, move money between budgets, or split one purchase across several. You can pick a past date and mark an entry to repeat every cycle.
+- **Activity:** search and filter every entry (by type, budget, tags or date range). Tap an entry to edit, duplicate or delete it; deleting can be undone.
+- **Insights:** a monthly breakdown, a daily spending chart, a comparison with last month, a spending calendar, highlights, and your cycle history.
+- **Plan:** savings goals (deposits, withdrawals, optional target dates), monthly bills, subscriptions, net worth and a wishlist. Marking a bill or subscription paid can also log it as an expense.
+- **Settings** (gear icon): name, currency, theme, budgets (add, edit, reorder), daily limit and large-expense alert, tags, the optional AI key, cloud backup, and data tools.
 
-## Back up your data
+### How cycles work
 
-Open **Tools** to access:
+Every Sunday at midnight, weekly budgets refill. Up to 50% of a budget's unspent money carries over; overspending carries over in full. Monthly budgets refill on the first cycle of a new month. Repeating entries are added once per cycle. If the app wasn't opened for a while, missed cycles are caught up when it next opens. Tap the countdown in the header to preview the next renewal.
 
-- **Backup Data:** download a JSON backup of your budget and tracking data.
-- **Restore Data:** select a previously downloaded JSON backup and confirm the restore.
-- **Export CSV:** download transactions for a spreadsheet.
-- **Print / PDF:** print a report or save it as a PDF through your browser.
+## Your data
 
-Keep regular JSON backups, especially before clearing browser data or changing devices. CSV exports are for analysis; use JSON for restoring data.
+- Everything is saved in your browser. Turn on **Settings → Cloud backup** to also mirror budgets and entries to Firebase under an anonymous account. That account is tied to this browser and is **not** a way to sign in on another device.
+- **Settings → Backup** downloads a JSON file and **Restore** loads one. Backups from older versions of BudgetFlow restore too. **Export CSV** is for spreadsheets.
+- Version 4 reads the same browser storage as earlier versions, so existing data carries over automatically. Before its first save it also keeps a one-time safety copy of the old data in `bf_pre_v4_snapshot`; this copy never includes your AI key.
 
-## Run locally
+## Optional AI (Gemini)
 
-The app lives in a single `index.html`; there is no build step or package installation.
+Add your own Gemini API key in **Settings** to get these features:
+- turn a sentence or your voice into an entry;
+- scan a receipt;
+- chat about your spending;
+- generate a monthly report card;
+- get suggested budget amounts.
+
+The key stays in your browser and is sent only to Google, in a request header. Using these features sends the relevant text, image or budget summary to Gemini. Budgeting works fully without a key.
+
+## Development
+
+The source lives in `app/` (React 19, Vite, Tailwind CSS 4, lucide-react). GitHub Pages serves the **built** files committed at the repository root (`index.html`, `assets/`, `sw.js`, `manifest.webmanifest` and icons), so you need to rebuild after changing the source.
 
 ```sh
-git clone https://github.com/manilaladarsh-hash/budgetflow.git
-cd budgetflow
-python -m http.server 8000
+npm install
+npm run dev        # local dev server with hot reload
+npm test           # unit tests (Vitest)
+npm run build      # builds to dist/ and copies the result to the repo root
+npm run e2e        # browser tests against the build (Playwright)
 ```
 
-With Python 3 installed, open **http://localhost:8000**. On Windows, use `py -m http.server 8000` if `python` is unavailable. Stop the server with **Ctrl+C**.
+Commit the source changes **and** the rebuilt root files together. CI (`.github/workflows/ci.yml`) runs the tests and fails if the committed build doesn't match the source.
 
-An internet connection is needed to load the externally hosted libraries and use cloud or AI features.
+To check cloud sync end to end, run `E2E_CLOUD=1 npm run e2e`. This creates one anonymous Firebase user. `npm run e2e -- <url>` runs the browser tests against a deployed copy.
 
-## Storage and optional AI
+Project layout:
 
-- The app uses browser storage and attempts anonymous Firebase sign-in for cloud storage of categories, transactions, and the week count. Other tracking features use browser storage. Anonymous sign-in is not a portable account for signing in on another device; use backups to move data.
-- For your own hosted copy, replace `firebaseConfig` in `index.html` with your Firebase project's configuration and configure Anonymous Authentication and Firestore access rules for each user's data. If Firebase is unavailable, the app falls back to browser storage.
-- Optional Gemini features include text entry, receipt scanning, and budget insights. Enter your own **Gemini API Key** in **Tools** and choose a model available to your account. Manual budgeting does not require an AI key.
-- The AI key is stored in your browser. Using AI sends the relevant input, receipt image, or budget context to Google's Gemini service. Model availability and API usage limits depend on your account.
+```
+app/src/lib/       pure logic: cycles, transactions, analytics, storage, backup, Gemini, cloud sync
+app/src/state/     app store (persistence, sync, cycle renewal) and navigation context
+app/src/ui/        design-system components, icons, toasts/confirm dialogs
+app/src/features/  screens and sheets
+tests/unit/        Vitest tests for app/src/lib
+tests/e2e/         Playwright flows and a legacy-data fixture
+```
 
-## Built with
-
-HTML, React 18, Tailwind CSS, Lucide icons, Firebase, and the Gemini API. Libraries load from CDNs; React JSX is compiled in the browser with Babel.
+For your own hosted copy, replace `firebaseConfig` in `app/src/lib/sync.js` with your project's configuration. Then enable Anonymous Authentication and restrict Firestore access to each user's own `artifacts/{appId}/users/{uid}` documents.
