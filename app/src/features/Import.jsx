@@ -9,6 +9,7 @@ import {
   parseStatement, buildReview, assignCategory, buildImportTransactions, summarise, suggestAccountLabel, suggestBudgets
 } from '../lib/importer.js';
 import { learnRule } from '../lib/merchants.js';
+import { decodePack } from '../lib/importpack.js';
 import { localDayKey, dateFromDayKey, formatShortDate } from '../lib/dates.js';
 import { newId } from '../lib/transactions.js';
 import { roundMoney } from '../lib/money.js';
@@ -210,6 +211,7 @@ export default function Import() {
         <p className="text-xs text-subtle mt-3 flex items-center gap-1.5"><ShieldCheck size={14} /> Files are read on this device. Nothing is uploaded.</p>
       </Card>
 
+      {!files.length && <PasteCode onDone={(r) => setDone(r)} />}
       {!files.length && <HowTo profiles={state.importProfiles} />}
 
       {/* Files */}
@@ -281,6 +283,55 @@ export default function Import() {
         }}
       />
     </div>
+  );
+}
+
+function PasteCode({ onDone }) {
+  const { actions } = useStore();
+  const { notify } = useFeedback();
+  const [open, setOpen] = useState(false);
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    setBusy(true);
+    try {
+      const pack = await decodePack(code);
+      const r = actions.importPack(pack);
+      if (!r.added) { notify('Everything in that code is already in BudgetFlow', { tone: 'info' }); return; }
+      const byBudget = {};
+      r.transactions.forEach((t) => {
+        const b = byBudget[t.categoryId] || { spent: 0, credits: 0 };
+        if (t.type === 'income') b.credits = roundMoney(b.credits + t.amount); else b.spent = roundMoney(b.spent + t.amount);
+        byBudget[t.categoryId] = b;
+      });
+      onDone({
+        batchId: r.batchId, count: r.added, byBudget, learned: (pack.rules || []).length,
+        spend: roundMoney(r.transactions.filter((t) => t.type !== 'income').reduce((s2, t) => s2 + t.amount, 0)),
+        credits: roundMoney(r.transactions.filter((t) => t.type === 'income').reduce((s2, t) => s2 + t.amount, 0)),
+        historyOnly: r.transactions.filter((t) => t.affectsBalance === false).length
+      });
+      setCode('');
+    } catch (err) {
+      notify(err.message, { tone: 'bad' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card className="p-4">
+      <button type="button" onClick={() => setOpen((o) => !o)} className="w-full flex items-center justify-between h-9 text-left" aria-expanded={open}>
+        <span className="font-medium">Have an import code or link?</span>
+        {open ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+      </button>
+      {open && (
+        <div className="mt-2 space-y-3">
+          <p className="text-sm text-muted">Paste the whole link or code. Entries already in BudgetFlow are skipped.</p>
+          <textarea value={code} onChange={(e) => setCode(e.target.value)} rows={4} aria-label="Import code" placeholder="https://…#/import?pack=…"
+            className="w-full px-4 py-3 rounded-2xl bg-surface-2 border border-line text-ink text-sm font-mono outline-none focus:border-accent resize-none" />
+          <Button className="w-full" onClick={run} loading={busy} disabled={!code.trim()}>Import</Button>
+        </div>
+      )}
+    </Card>
   );
 }
 

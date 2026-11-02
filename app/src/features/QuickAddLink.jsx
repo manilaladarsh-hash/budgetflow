@@ -3,6 +3,7 @@ import { useStore } from '../state/store.jsx';
 import { useNav } from '../state/nav.js';
 import { useFeedback } from '../ui/feedback.jsx';
 import { parseQuickAdd, planQuickAdd } from '../lib/quickadd.js';
+import { decodePack } from '../lib/importpack.js';
 import { useMoney } from './shared.jsx';
 
 // Handles links like  #/add?amount=6.45&merchant=Starbucks&card=Amex&auto=1
@@ -16,8 +17,26 @@ export default function QuickAddLink() {
   stateRef.current = state;
 
   useEffect(() => {
+    const handlePack = async (hash) => {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#/activity`);
+      nav.go('activity');
+      try {
+        const pack = await decodePack(hash);
+        const r = actions.importPack(pack);
+        const created = r.createdBudgets.length ? ` · ${r.createdBudgets.length} new budgets` : '';
+        notify(r.added ? `Added ${r.added} entries${pack.label ? ` from ${pack.label}` : ''}${created}` : 'Everything in that link is already in BudgetFlow', {
+          tone: r.added ? 'good' : 'info',
+          actionLabel: r.added ? 'Undo' : undefined,
+          onAction: () => actions.undoImport(r.batchId),
+          duration: 9000
+        });
+      } catch (err) {
+        notify(err.message, { tone: 'bad' });
+      }
+    };
     const handle = () => {
       const hash = window.location.hash;
+      if (/^#\/?import\?pack=/.test(hash)) { handlePack(hash); return; }
       if (!/^#\/?add(\?|$)/.test(hash)) return;
       const request = parseQuickAdd(hash.split('?')[1] || '');
       // Swap the link for Home so a refresh doesn't add it twice.

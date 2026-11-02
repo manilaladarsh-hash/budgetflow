@@ -11,6 +11,7 @@ import { dailyBudget, spentOnDay, updateStreak, advanceDue } from '../lib/analyt
 import { localDayKey } from '../lib/dates.js';
 import { periodStartFor } from '../lib/cycle.js';
 import { merchantKey, learnRule } from '../lib/merchants.js';
+import { applyPack } from '../lib/importpack.js';
 import { roundMoney } from '../lib/money.js';
 
 const StoreContext = createContext(null);
@@ -241,6 +242,15 @@ export function StoreProvider({ children, onEvent }) {
         const state = addTransactions(s, transactions);
         return { ...state, importRules: rules ?? s.importRules, importProfiles: profiles ? { ...s.importProfiles, ...profiles } : s.importProfiles };
       }),
+      importPack: (pack) => {
+        const batchId = newId();
+        const preview = applyPack(stateRef.current, pack, batchId);
+        update((s) => {
+          const r = applyPack(s, pack, batchId);
+          return addTransactions(r.state, r.transactions);
+        });
+        return preview;
+      },
       undoImport: (batchId) => update((s) => s.transactions
         .filter((t) => t.importBatch === batchId)
         .reduce((acc, t) => removeTransaction(acc, t.id), s)),

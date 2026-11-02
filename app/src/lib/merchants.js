@@ -287,13 +287,15 @@ export const conceptForBankCategory = (label) => {
 };
 
 // Pick the user's budget that best fits a concept.
-export const categoryForConcept = (concept, categories) => {
+// strict: only close names (no "food"/"shopping"-style fallbacks or icons).
+export const categoryForConcept = (concept, categories, { strict = false } = {}) => {
   if (!concept || !CONCEPTS[concept]) return null;
-  const { synonyms } = CONCEPTS[concept];
+  const synonyms = strict ? CONCEPTS[concept].synonyms.slice(0, 3) : CONCEPTS[concept].synonyms;
   for (const syn of synonyms) {
     const hit = categories.find((c) => c.name.toLowerCase().includes(syn));
     if (hit) return hit;
   }
+  if (strict) return null;
   const byIcon = categories.find((c) => ICON_CONCEPT[c.icon] === concept);
   return byIcon || null;
 };
