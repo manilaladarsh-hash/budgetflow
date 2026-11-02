@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Minus, Repeat, ArrowLeftRight, RefreshCw, Scissors } from 'lucide-react';
+import { Minus, Repeat, ArrowLeftRight, RefreshCw, Scissors, HandCoins } from 'lucide-react';
 import { useStore } from '../state/store.jsx';
 import { formatMoney } from '../lib/money.js';
 import { sortCategories } from '../lib/storage.js';
@@ -81,6 +81,7 @@ const txIcon = (tx, category) => {
   const t = txType(tx);
   if (t === 'transfer') return <span className="w-10 h-10 rounded-2xl bg-info-soft text-info flex items-center justify-center shrink-0"><ArrowLeftRight size={18} /></span>;
   if (t === 'system' || tx.categoryId === 'system') return <span className="w-10 h-10 rounded-2xl bg-surface-2 text-muted flex items-center justify-center shrink-0"><RefreshCw size={17} /></span>;
+  if (tx.categoryId === 'income') return <span className="w-10 h-10 rounded-2xl bg-accent-soft text-accent-strong flex items-center justify-center shrink-0"><HandCoins size={18} /></span>;
   return <CategoryBadge category={category || { name: tx.categoryName, icon: 'circle' }} />;
 };
 

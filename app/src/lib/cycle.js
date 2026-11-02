@@ -59,7 +59,7 @@ const renewOnce = (state, start, boundary) => {
   cycleEntry.rolloverSummary = rolloverSummary;
 
   const templates = state.transactions.filter(
-    (t) => isRecurringTemplate(t) && (t.recurring === 'weekly' || isNewMonth) && categories.some((c) => c.id === t.categoryId)
+    (t) => isRecurringTemplate(t) && (t.recurring === 'weekly' || isNewMonth) && (t.categoryId === 'income' || categories.some((c) => c.id === t.categoryId))
   );
   const generated = templates.map((tpl, i) => {
     const tx = {

@@ -4,7 +4,7 @@ import { useStore } from '../state/store.jsx';
 import { useFeedback } from '../ui/feedback.jsx';
 import { parseAmount, roundMoney } from '../lib/money.js';
 import { localDayKey, addDays, isoForDay } from '../lib/dates.js';
-import { buildTransaction, buildTransfer } from '../lib/transactions.js';
+import { buildTransaction, buildTransfer, INCOME_CATEGORY } from '../lib/transactions.js';
 import { spentOnDay } from '../lib/analytics.js';
 import { callGemini, extractJson, prompts, fileToBase64 } from '../lib/gemini.js';
 import { Sheet, Segmented, MoneyInput, TextInput, Chip, Button, Field, cx } from '../ui/primitives.jsx';
@@ -61,7 +61,7 @@ export default function AddSheet({ state: open, onClose }) {
   const splitTotal = useMemo(() => lines.reduce((s, l) => s + (parseAmount(l.amount) || 0), 0), [lines]);
 
   const saveEntry = async () => {
-    const category = state.categories.find((c) => c.id === form.categoryId);
+    const category = mode === 'income' ? INCOME_CATEGORY : state.categories.find((c) => c.id === form.categoryId);
     if (!Number.isFinite(amountNum) || amountNum <= 0) return setError('Enter an amount above zero.');
     if (!category) return setError('Choose a budget.');
     const isExpense = mode === 'expense';
@@ -91,7 +91,7 @@ export default function AddSheet({ state: open, onClose }) {
     });
     actions.addTransactions([tx]);
     onClose();
-    notify(isExpense ? `${money(tx.amount)} spent on ${category.name}` : `${money(tx.amount)} added to ${category.name}`, {
+    notify(isExpense ? `${money(tx.amount)} spent on ${category.name}` : `${money(tx.amount)} income recorded`, {
       actionLabel: 'Undo',
       onAction: () => actions.deleteTransaction(tx.id)
     });
@@ -273,10 +273,14 @@ export default function AddSheet({ state: open, onClose }) {
               </div>
             </div>
 
+            {mode === 'income' ? (
+              <p className="text-sm text-muted rounded-2xl bg-surface-2 border border-line px-4 py-3">Income is recorded for your insights and savings rate. It isn't added to a budget, so it won't change what you have left to spend. To top up a budget, edit the budget or use <b className="text-ink">Move</b>.</p>
+            ) : (
             <div>
               <p className="text-[13px] font-medium text-muted mb-2">Budget</p>
               <CategoryPicker categories={categories} value={form.categoryId} onChange={(categoryId) => set({ categoryId })} />
             </div>
+            )}
 
             <Field label="Note">
               <TextInput value={form.description ?? ''} onChange={(e) => set({ description: e.target.value })} placeholder={mode === 'income' ? 'e.g. Paycheque' : 'e.g. Coffee'} maxLength={80} />

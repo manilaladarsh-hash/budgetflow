@@ -95,9 +95,9 @@ export default function Import() {
 
   const summary = summarise(items);
   const groups = {
-    ready: items.filter((i) => i.include),
+    ready: items.filter((i) => i.include && i.categoryId !== 'income'),
     needs: items.filter((i) => !i.include && i.status === 'needs'),
-    deposit: items.filter((i) => !i.include && i.status === 'deposit'),
+    income: items.filter((i) => i.include && i.categoryId === 'income'),
     skipped: items.filter((i) => !i.include && i.status === 'skipped')
   };
   const visible = groups[tab] || [];
@@ -223,7 +223,7 @@ export default function Import() {
           {budgetIdeas.length > 0 && <BudgetIdeas ideas={budgetIdeas} />}
 
           <div className="grid grid-cols-4 gap-1.5 p-1 rounded-2xl bg-surface-2 border border-line" role="tablist" aria-label="Review groups">
-            {[['ready', 'Adding', groups.ready.length], ['needs', 'Need budget', groups.needs.length], ['deposit', 'Deposits', groups.deposit.length], ['skipped', 'Skipped', groups.skipped.length]].map(([id, label, n]) => (
+            {[['ready', 'Adding', groups.ready.length], ['needs', 'Need budget', groups.needs.length], ['income', 'Income', groups.income.length], ['skipped', 'Skipped', groups.skipped.length]].map(([id, label, n]) => (
               <button
                 key={id}
                 type="button"
@@ -241,7 +241,7 @@ export default function Import() {
           <p className="text-sm text-muted px-1">
             {tab === 'ready' && 'These will be added. Tap a budget to change it, or the tick to leave one out.'}
             {tab === 'needs' && "BudgetFlow couldn't guess these. Pick a budget and it'll remember the merchant next time."}
-            {tab === 'deposit' && "Pay, interest and other money in aren't added to budgets unless you choose one."}
+            {tab === 'income' && "Pay, interest and other money in. It's recorded for your insights but never added to a budget, so it won't change what you have left to spend."}
             {tab === 'skipped' && 'Card payments, transfers, duplicates and entries you already logged. Tap the tick to add one anyway.'}
           </p>
 
@@ -416,11 +416,11 @@ function ReviewRow({ item, onToggle, onChoose, showAccount }) {
             <button
               type="button"
               onClick={onChoose}
-              className={cx('h-8 pl-2 pr-2.5 rounded-full text-[13px] font-medium inline-flex items-center gap-1.5 border transition', category ? 'border-transparent' : 'border-dashed border-warn text-warn')}
+              className={cx('h-8 pl-2 pr-2.5 rounded-full text-[13px] font-medium inline-flex items-center gap-1.5 border transition', category ? 'border-transparent' : item.categoryId === 'income' ? 'border-transparent bg-accent-soft text-accent-strong pl-3' : 'border-dashed border-warn text-warn')}
               style={category ? { background: `color-mix(in srgb, ${tint} 14%, transparent)`, color: tint } : undefined}
               aria-label={category ? `Budget: ${category.name}. Change` : `Choose a budget for ${item.merchant}`}
             >
-              {category ? <><CategoryBadge category={category} size={20} iconSize={12} />{category.name}</> : 'Choose budget'}
+              {category ? <><CategoryBadge category={category} size={20} iconSize={12} />{category.name}</> : item.categoryId === 'income' ? 'Income · not budgeted' : 'Choose budget'}
               <ChevronDown size={14} />
             </button>
           )}
@@ -508,6 +508,12 @@ function CategoryChooser({ item, count, onClose, onPick }) {
       <Sheet open={!creating} onClose={onClose} title={item.merchant || 'Choose a budget'}>
         <p className="text-sm text-muted -mt-1 mb-4">{isIncome ? '+' : '−'}{money(item.amount).replace('−', '')} · {formatShortDate(dateFromDayKey(item.date))} · {item.account}</p>
         <CategoryPicker categories={categories} value={item.categoryId} onChange={(categoryId) => onPick({ categoryId, always: remember, applyAll })} showBalance={false} />
+        {isIncome && (
+          <Button variant={item.categoryId === 'income' ? 'soft' : 'secondary'} className="w-full mt-3" onClick={() => onPick({ categoryId: 'income', always: false, applyAll })}>
+            Income · not added to a budget
+          </Button>
+        )}
+        {isIncome && <p className="text-xs text-subtle mt-2">Pick a budget above only if this is a refund for something you bought.</p>}
         <Button variant="ghost" size="sm" className="mt-3" onClick={() => setCreating(true)}><Plus size={16} /> New budget</Button>
         <div className="mt-4 space-y-3">
           {learnable ? (

@@ -5,7 +5,7 @@ import { useNav } from '../state/nav.js';
 import { useFeedback } from '../ui/feedback.jsx';
 import { parseAmount, roundMoney } from '../lib/money.js';
 import { localDayKey, isoForDay, formatDay, formatTime } from '../lib/dates.js';
-import { txType } from '../lib/transactions.js';
+import { txType, INCOME_CATEGORY, INCOME_ID } from '../lib/transactions.js';
 import { Sheet, Segmented, MoneyInput, TextInput, Chip, Button, Field } from '../ui/primitives.jsx';
 import { CategoryPicker, useMoney, useSortedCategories } from './shared.jsx';
 
@@ -55,7 +55,10 @@ export default function TransactionSheet({ tx, onClose }) {
   const save = (e) => {
     e?.preventDefault();
     const amount = parseAmount(form.amount);
-    const category = state.categories.find((c) => c.id === form.categoryId);
+    // Income stays out of budgets; a credit you file under a budget is a refund.
+    const category = form.type === 'income' && (form.categoryId === INCOME_ID || !form.categoryId)
+      ? INCOME_CATEGORY
+      : state.categories.find((c) => c.id === form.categoryId);
     if (!Number.isFinite(amount) || amount <= 0) return setError('Enter an amount above zero.');
     if (!category) return setError('Choose a budget.');
     const sameDay = localDayKey(tx.date) === form.day;
@@ -115,6 +118,15 @@ export default function TransactionSheet({ tx, onClose }) {
         <Field label="Amount">
           <MoneyInput symbol={money.symbol} value={form.amount} onChange={(e) => set({ amount: e.target.value })} inputClassName="text-xl font-semibold" />
         </Field>
+        {form.type === 'income' && (
+          <div>
+            <p className="text-[13px] font-medium text-muted mb-2">Counts as</p>
+            <Segmented ariaLabel="Income or refund" size="sm" value={form.categoryId === INCOME_ID || !form.categoryId ? 'income' : 'refund'}
+              onChange={(v) => set({ categoryId: v === 'income' ? INCOME_ID : (state.categories[0]?.id || '') })}
+              options={[{ value: 'income', label: 'Income (not budgeted)' }, { value: 'refund', label: 'Refund to a budget' }]} />
+          </div>
+        )}
+        {!(form.type === 'income' && (form.categoryId === INCOME_ID || !form.categoryId)) && (
         <div>
           <p className="text-[13px] font-medium text-muted mb-2">Budget</p>
           <CategoryPicker categories={categories} value={form.categoryId} onChange={(categoryId) => set({ categoryId })} />
@@ -122,6 +134,7 @@ export default function TransactionSheet({ tx, onClose }) {
             <p className="text-xs text-warn mt-2">The original budget “{tx.categoryName}” was deleted. Pick one to keep editing.</p>
           )}
         </div>
+        )}
         <Field label="Note">
           <TextInput value={form.description} onChange={(e) => set({ description: e.target.value })} maxLength={80} />
         </Field>

@@ -4,7 +4,7 @@
 import { cleanMerchant, merchantKey, suggestCategory, historyIndex, conceptForText, categoryForConcept } from './merchants.js';
 import { dateFromDayKey, localDayKey } from './dates.js';
 import { roundMoney } from './money.js';
-import { buildTransaction, newId } from './transactions.js';
+import { buildTransaction, newId, INCOME_ID, INCOME_CATEGORY } from './transactions.js';
 import { periodStartFor } from './cycle.js';
 
 // ---------------------------------------------------------------- CSV ----
@@ -535,8 +535,9 @@ export const buildReview = ({ files, state, now = new Date() }) => {
         item.suggestion = suggestion;
         item.categoryId = suggestion.categoryId;
       }
+      if (item.kind === 'income' && !item.categoryId) item.categoryId = INCOME_ID; // recorded, not budgeted
       if (item.status !== 'skipped') {
-        if (!item.categoryId) item.status = item.kind === 'income' ? 'deposit' : 'needs';
+        if (!item.categoryId) item.status = 'needs';
         item.include = !!item.categoryId;
       }
       const category = categories.find((c) => c.id === item.categoryId);
@@ -581,12 +582,12 @@ export const pairTransfers = (items) => {
 
 // Recompute derived flags after the user picks a budget in the review.
 export const assignCategory = (item, categoryId, state) => {
-  const category = state.categories.find((c) => c.id === categoryId);
+  const category = categoryId === INCOME_ID ? null : state.categories.find((c) => c.id === categoryId);
   return {
     ...item,
     categoryId,
     include: !!categoryId,
-    status: item.status === 'skipped' ? item.status : categoryId ? 'ready' : item.kind === 'income' ? 'deposit' : 'needs',
+    status: item.status === 'skipped' ? item.status : categoryId ? 'ready' : 'needs',
     historyOnly: !!category && dateFromDayKey(item.date) < periodStartFor(category, state.cycleStartDate)
   };
 };
@@ -596,7 +597,7 @@ export const buildImportTransactions = (items, state, batchId = newId()) => {
   return items
     .filter((it) => it.include && it.categoryId)
     .map((it) => {
-      const category = state.categories.find((c) => c.id === it.categoryId);
+      const category = it.categoryId === INCOME_ID ? INCOME_CATEGORY : state.categories.find((c) => c.id === it.categoryId);
       if (!category) return null;
       const date = dateFromDayKey(it.date);
       return buildTransaction({
@@ -613,7 +614,7 @@ export const buildImportTransactions = (items, state, batchId = newId()) => {
           source: 'import',
           account: it.account,
           originalDescription: it.raw.replace(/\d{8,}/g, (m) => `••${m.slice(-2)}`),
-          ...(it.historyOnly ? { affectsBalance: false } : {})
+          ...(it.historyOnly && it.categoryId !== INCOME_ID ? { affectsBalance: false } : {})
         }
       });
     })
@@ -629,7 +630,8 @@ export const summarise = (items) => {
     deposits: items.filter((i) => i.status === 'deposit').length,
     skipped: items.filter((i) => i.status === 'skipped').length,
     spend: roundMoney(included.filter((i) => i.direction === 'out').reduce((s, i) => s + i.amount, 0)),
-    credits: roundMoney(included.filter((i) => i.direction === 'in').reduce((s, i) => s + i.amount, 0)),
+    credits: roundMoney(included.filter((i) => i.direction === 'in' && i.categoryId !== INCOME_ID).reduce((s, i) => s + i.amount, 0)),
+    income: roundMoney(included.filter((i) => i.categoryId === INCOME_ID).reduce((s, i) => s + i.amount, 0)),
     historyOnly: included.filter((i) => i.historyOnly).length
   };
 };

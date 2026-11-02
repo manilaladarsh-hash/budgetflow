@@ -11,6 +11,12 @@ export const newId = () => {
 
 export const txType = (t) => t?.type || 'expense';
 
+// Income is recorded (Activity, Insights, savings rate) but not put into a
+// budget, so it never increases what you have left to spend.
+export const INCOME_ID = 'income';
+export const INCOME_CATEGORY = { id: INCOME_ID, name: 'Income' };
+export const isBudgetFreeIncome = (t) => t?.categoryId === INCOME_ID;
+
 export const isSystemTx = (t) => t?.categoryId === 'system' && txType(t) !== 'transfer';
 
 // Counts as spending: real expenses (legacy records may have no type).

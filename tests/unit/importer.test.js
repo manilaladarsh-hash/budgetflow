@@ -139,13 +139,13 @@ describe('merchants and categories', () => {
 describe('review', () => {
   const file = (key, account, opts) => ({ id: key, account, parsed: parseStatement(SAMPLES[key], `${key}.csv`, opts) });
 
-  it('categorises, skips payments and keeps deposits out by default', () => {
+  it('categorises, skips payments and records deposits as income (not budgeted)', () => {
     const items = buildReview({ files: [file('rbc', 'RBC chequing')], state: stateWith(), now: NOW });
     const by = (m) => items.find((i) => i.raw.includes(m));
     expect(by('TIM HORTONS')).toMatchObject({ categoryId: 'c', include: true, status: 'ready' });
     expect(by('LOBLAWS')).toMatchObject({ categoryId: 'g', include: true });
     expect(by('PAYMENT - VISA')).toMatchObject({ status: 'skipped', reason: 'Card payment', include: false });
-    expect(by('PAYROLL')).toMatchObject({ status: 'deposit', include: false });
+    expect(by('PAYROLL')).toMatchObject({ status: 'ready', categoryId: 'income', include: true });
   });
 
   it('treats card credits from known merchants as refunds', () => {
@@ -203,11 +203,15 @@ describe('review', () => {
     // "Rent share" e-Transfer is recognised; interest is a deposit until you pick a budget.
     expect(items.find((i) => i.raw.includes('e-Transfer'))).toMatchObject({ categoryId: 'r', status: 'ready' });
     const interest = items.find((i) => i.raw.includes('Interest'));
-    expect(interest).toMatchObject({ status: 'deposit', include: false });
-    const fixed = assignCategory(interest, 's', state);
+    expect(interest).toMatchObject({ status: 'ready', categoryId: 'income', include: true });
+    // Income never changes budget balances.
+    const txs = buildImportTransactions([interest], state);
+    expect(txs[0]).toMatchObject({ type: 'income', categoryId: 'income', categoryName: 'Income' });
+    expect(addTransactions(state, txs).categories).toEqual(state.categories);
+    const fixed = assignCategory({ ...interest, status: 'needs', include: false, categoryId: null }, 's', state);
     expect(fixed).toMatchObject({ include: true, status: 'ready' });
     const s = summarise(items.map((i) => (i.id === fixed.id ? fixed : i)));
-    expect(s.included).toBe(items.filter((i) => i.include).length + 1);
+    expect(s.included).toBe(items.filter((i) => i.include).length);
   });
 
   it('builds tagged transactions with fingerprints', () => {
@@ -281,7 +285,7 @@ describe('Neo, BMO and Wealthsimple layouts', async () => {
     expect(f.parsed.rows.find((r) => r.raw.includes('UBEREATS')).merchant).toBe('Uber Eats');
     const items = buildReview({ files: [f], state: stateWith(), now: NOW });
     expect(items.find((i) => i.raw.startsWith('Payment'))).toMatchObject({ status: 'skipped', reason: 'Card payment' });
-    expect(items.find((i) => i.raw.startsWith('Reward'))).toMatchObject({ status: 'deposit', include: false });
+    expect(items.find((i) => i.raw.startsWith('Reward'))).toMatchObject({ status: 'ready', categoryId: 'income', include: true });
   });
 
   it('BMO bank: both account sections, internal transfers and card payments', () => {
@@ -297,7 +301,7 @@ describe('Neo, BMO and Wealthsimple layouts', async () => {
     expect(by('SAM TESTER').reason).toBe('E-transfer to/from yourself');
     expect(by('JANE LANDLORD')).toMatchObject({ merchant: 'E-Transfer to Jane Landlord', status: 'needs' });
     expect(by('BELL')).toMatchObject({ merchant: 'Bell', direction: 'out', amount: 63.45 });
-    expect(by('[IN]')).toMatchObject({ merchant: 'Interest', status: 'deposit' });
+    expect(by('[IN]')).toMatchObject({ merchant: 'Interest', status: 'ready', categoryId: 'income' });
   });
 
   it('BMO Mastercard: purchases positive, payments from the bank skipped', () => {
@@ -319,7 +323,7 @@ describe('Neo, BMO and Wealthsimple layouts', async () => {
     const items = buildReview({ files: [ws, fileOf('bmoBank', 'bmochequingsaving.csv')], state: stateWith(), now: NOW });
     expect(items.find((i) => i.account === 'Wealthsimple' && i.amount === 500)).toMatchObject({ status: 'skipped', reason: 'Transfer between your accounts' });
     expect(items.find((i) => i.raw.includes('SAM TESTER')).status).toBe('skipped');
-    expect(items.find((i) => i.raw.startsWith('Interest received')).status).toBe('deposit');
+    expect(items.find((i) => i.raw.startsWith('Interest received')).categoryId).toBe('income');
   });
 
   it('suggests budgets for unplaced spending, folding overlaps', () => {

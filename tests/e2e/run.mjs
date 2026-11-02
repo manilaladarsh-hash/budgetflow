@@ -137,9 +137,16 @@ await test('add expense, undo, backdated income and quick spend', async () => {
   await page.waitForTimeout(200);
   expect(await balance(page, 'Grocery') === 31.5, 'undo did not restore balance');
 
-  await addEntry(page, { amount: '40', category: 'Shopping', note: 'Refund', type: 'Income', day: 'Yesterday' });
+  // Income is recorded but never added to a budget (no budget picker).
+  await page.getByRole('button', { name: 'Add transaction' }).click();
+  await dialog(page).getByRole('radio', { name: 'Income', exact: true }).click();
+  expect(!(await dialog(page).getByRole('radiogroup', { name: 'Category' }).count()), 'income should not ask for a budget');
+  await dialog(page).getByLabel('Amount', { exact: true }).fill('40');
+  await dialog(page).getByPlaceholder(/e\.g\./).first().fill('Refund');
+  await dialog(page).getByRole('button', { name: 'Yesterday', exact: true }).click();
+  await dialog(page).getByRole('button', { name: /^Add income/ }).click();
   await page.waitForTimeout(200);
-  expect(await balance(page, 'Shopping') === 105, 'income not applied');
+  expect(await balance(page, 'Shopping') === 65, 'income must not change budgets');
   const tx = JSON.parse(await ls(page, 'tx_v33')).find((t) => t.description === 'Refund');
   const y = new Date(); y.setDate(y.getDate() - 1);
   expect(new Date(tx.date).getDate() === y.getDate(), 'backdated entry has wrong date');
@@ -150,7 +157,7 @@ await test('add expense, undo, backdated income and quick spend', async () => {
   await d.getByRole('button', { name: '$5', exact: true }).click();
   await d.getByRole('button', { name: /^Add expense/ }).click();
   await page.waitForTimeout(200);
-  expect(await balance(page, 'Shopping') === 100, 'quick spend not applied');
+  expect(await balance(page, 'Shopping') === 60, 'quick spend not applied');
   return page;
 });
 

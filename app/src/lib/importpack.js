@@ -8,7 +8,7 @@ import { buildImportTransactions } from './importer.js';
 import { categoryForConcept, learnRule } from './merchants.js';
 import { periodStartFor } from './cycle.js';
 import { dateFromDayKey, localDayKey } from './dates.js';
-import { newId } from './transactions.js';
+import { newId, INCOME_ID } from './transactions.js';
 import { roundMoney } from './money.js';
 
 export const PACK_VERSION = 1;
@@ -87,7 +87,7 @@ export const applyPack = (state, pack, batchId = newId()) => {
       && Math.abs((Number(t.amount) || 0) - amount) < 0.01
       && Math.abs(Math.round((dateFromDayKey(date) - dateFromDayKey(localDayKey(t.date))) / 86400000) - 2) <= 3);
     if (twin) { usedManual.add(twin.id); skipped += 1; return; }
-    const categoryId = budgetIds[budgetIdx];
+    const categoryId = budgetIdx === -1 ? INCOME_ID : budgetIds[budgetIdx];
     const category = categories.find((c) => c.id === categoryId);
     items.push({
       date, amount, direction, merchant, raw, key: key || '', account: pack.accounts[accountIdx] || 'Card',
