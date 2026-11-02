@@ -7,7 +7,9 @@ import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { writeFileSync } from 'node:fs';
 import { legacyStorage } from './fixtures.mjs';
+import { SAMPLES } from '../fixtures/statements.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const outDir = fileURLToPath(new URL('./out/', import.meta.url));
@@ -287,6 +289,75 @@ await test('works offline after the first visit', async () => {
   return page;
 });
 
+await test('import bank + card statements, learn a rule, undo, no duplicates', async () => {
+  const td = `${outDir}accountactivity.csv`;
+  const amex = `${outDir}Summary.csv`;
+  writeFileSync(td, SAMPLES.td);
+  writeFileSync(amex, SAMPLES.amex);
+  const page = await newPage({ seed: legacyStorage() });
+  await go(page, 'activity');
+  await page.getByRole('button', { name: 'Import statements' }).click();
+  await page.getByTestId('import-input').setInputFiles([td, amex]);
+  await page.getByText('accountactivity.csv').waitFor();
+  expect(await page.getByLabel('Card name for accountactivity.csv').inputValue() === 'TD', 'TD not detected');
+  expect(await page.getByLabel('Card name for Summary.csv').inputValue() === 'Amex', 'Amex not detected');
+  await page.screenshot({ path: `${outDir}import-review.png`, fullPage: true });
+  await page.getByRole('tab', { name: /Need budget/ }).click();
+  await page.getByRole('button', { name: 'Choose a budget for PRESTO' }).click();
+  await dialog(page).getByRole('radio', { name: 'Shopping' }).click();
+  await page.getByRole('tab', { name: /Skipped/ }).click();
+  expect(await page.getByText('Card payment').first().isVisible(), 'card payment not skipped');
+  await page.getByRole('button', { name: /^Add \d+ entr/ }).click();
+  await page.getByText(/^Added \d+ entries$/).waitFor();
+  await page.screenshot({ path: `${outDir}import-done.png`, fullPage: true });
+  const txs = JSON.parse(await ls(page, 'tx_v33'));
+  const imported = txs.filter((t) => t.source === 'import');
+  expect(imported.find((t) => t.description === 'PRESTO')?.categoryName === 'Shopping', 'chosen budget not used');
+  expect(imported.find((t) => t.description === 'Netflix')?.account === 'Amex', 'card label missing');
+  expect(JSON.parse(await ls(page, 'import_rules_v1')).some((r) => r.match === 'PRESTO'), 'rule not learned');
+  // Only the Nov 1 Tim Hortons is inside the current cycle; October ones are history.
+  expect(await balance(page, 'Coffee') === -8.25, `coffee balance ${await balance(page, 'Coffee')}`);
+  await page.getByRole('button', { name: 'Undo import' }).click();
+  await page.waitForTimeout(200);
+  expect(JSON.parse(await ls(page, 'tx_v33')).every((t) => t.source !== 'import'), 'undo left imported entries');
+  expect(await balance(page, 'Coffee') === -4, 'undo did not restore balance');
+  // Import again, then a third time: nothing new the third time.
+  await go(page, 'import');
+  await page.getByTestId('import-input').setInputFiles([td, amex]);
+  await page.getByRole('button', { name: /^Add \d+ entr/ }).click();
+  await page.getByText(/^Added \d+ entries$/).waitFor();
+  await page.getByRole('button', { name: 'Import more files' }).click();
+  await page.getByTestId('import-input').setInputFiles([td, amex]);
+  await page.getByRole('button', { name: 'Nothing selected' }).waitFor();
+  await page.getByRole('tab', { name: /Skipped/ }).click();
+  expect(await page.getByText('Already imported').first().isVisible(), 'duplicates not flagged');
+  return page;
+});
+
+await test('Apple Pay link logs known merchants and asks about new ones', async () => {
+  const page = await newPage({ seed: legacyStorage() });
+  await page.goto(`${base}#/add?auto=1&amount=CA%244.50&merchant=Tim%20Hortons&card=Amex`);
+  await page.getByRole('status').getByText('$4.50 at Tim Hortons → Coffee').waitFor();
+  expect(page.url().endsWith('#/home'), 'link not cleared from the address bar');
+  const tx = JSON.parse(await ls(page, 'tx_v33')).find((t) => t.source === 'applepay');
+  expect(tx && tx.account === 'Amex' && tx.categoryName === 'Coffee', 'apple pay entry wrong');
+  await page.goto(`${base}#/add?auto=1&amount=4.50&merchant=Tim%20Hortons`);
+  await page.getByRole('status').getByText(/Already logged/).waitFor();
+  await page.goto(`${base}#/add?auto=1&amount=19&merchant=Zorblax%20Ltd&card=Visa`);
+  const d = dialog(page);
+  await d.getByRole('radio', { name: /^Shopping/ }).click();
+  expect(await d.getByLabel('Amount', { exact: true }).inputValue() === '19', 'amount not prefilled');
+  await d.getByRole('button', { name: /^Add expense/ }).click();
+  await page.waitForTimeout(200);
+  const z = JSON.parse(await ls(page, 'tx_v33')).find((t) => t.description === 'Zorblax Ltd');
+  expect(z && z.source === 'applepay' && z.account === 'Visa', 'confirmed apple pay entry missing source/card');
+  await go(page, 'settings');
+  await page.getByRole('button', { name: 'Set-up steps' }).click();
+  await page.getByTestId('quickadd-template').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `${outDir}settings-applepay.png`, fullPage: true });
+  return page;
+});
+
 // Cloud sync round-trip against the real Firebase project (opt-in, creates
 // one anonymous user): E2E_CLOUD=1 npm run e2e
 if (process.env.E2E_CLOUD) {
@@ -312,7 +383,7 @@ for (const [label, viewport] of [['phone', { width: 390, height: 844 }], ['ipad'
   for (const scheme of ['light', 'dark']) {
     await test(`screens render (${label}, ${scheme})`, async () => {
       const page = await newPage({ seed: legacyStorage(), viewport, colorScheme: scheme });
-      for (const r of ['home', 'activity', 'insights', 'plan', 'settings']) {
+      for (const r of ['home', 'activity', 'insights', 'plan', 'settings', 'import']) {
         await go(page, r);
         await page.waitForTimeout(250);
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);

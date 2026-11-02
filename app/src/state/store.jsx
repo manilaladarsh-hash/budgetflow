@@ -9,6 +9,8 @@ import {
 } from '../lib/transactions.js';
 import { dailyBudget, spentOnDay, updateStreak, advanceDue } from '../lib/analytics.js';
 import { localDayKey } from '../lib/dates.js';
+import { periodStartFor } from '../lib/cycle.js';
+import { merchantKey, learnRule } from '../lib/merchants.js';
 import { roundMoney } from '../lib/money.js';
 
 const StoreContext = createContext(null);
@@ -212,7 +214,37 @@ export function StoreProvider({ children, onEvent }) {
         return tx;
       },
       restoreTransaction: (tx) => update((s) => restoreTransaction(s, tx)),
-      editTransaction: (tx) => update((s) => replaceTransaction(s, { ...tx, updatedAt: new Date().toISOString() })),
+      editTransaction: (tx) => update((s) => {
+        const prev = s.transactions.find((t) => t.id === tx.id);
+        let next = { ...tx, updatedAt: new Date().toISOString() };
+        // Imported entries count toward balances only inside the current period.
+        if (next.source === 'import') {
+          const cat = s.categories.find((c) => c.id === next.categoryId);
+          const inPeriod = cat && new Date(next.date) >= periodStartFor(cat, s.cycleStartDate);
+          if (inPeriod) delete next.affectsBalance; else next = { ...next, affectsBalance: false };
+        }
+        let state = replaceTransaction(s, next);
+        // Re-categorising an imported / Apple Pay entry teaches the auto-sort.
+        if (prev && (next.source === 'import' || next.source === 'applepay') && prev.categoryId !== next.categoryId && (next.type || 'expense') === 'expense') {
+          const key = merchantKey(next.originalDescription || next.description);
+          if (key) state = { ...state, importRules: learnRule(state.importRules, { key, categoryId: next.categoryId }) };
+        }
+        return state;
+      }),
+      removeTransactions: (ids) => {
+        const set = new Set(ids);
+        const removed = stateRef.current.transactions.filter((t) => set.has(t.id));
+        update((s) => removed.reduce((acc, t) => removeTransaction(acc, t.id), s));
+        return removed;
+      },
+      importBatch: ({ transactions, rules, profiles }) => update((s) => {
+        const state = addTransactions(s, transactions);
+        return { ...state, importRules: rules ?? s.importRules, importProfiles: profiles ? { ...s.importProfiles, ...profiles } : s.importProfiles };
+      }),
+      undoImport: (batchId) => update((s) => s.transactions
+        .filter((t) => t.importBatch === batchId)
+        .reduce((acc, t) => removeTransaction(acc, t.id), s)),
+      setRules: (rules) => update((s) => ({ ...s, importRules: rules })),
 
       addCategory: (cat) => {
         const id = newId();

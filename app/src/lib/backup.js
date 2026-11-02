@@ -27,7 +27,9 @@ export const createBackup = (state, now = new Date()) => ({
   dailySpendLimit: state.prefs.dailyLimit,
   txAlertThreshold: state.prefs.alertThreshold,
   currency: state.prefs.currency,
-  userName: state.prefs.name
+  userName: state.prefs.name,
+  importRules: state.importRules,
+  importProfiles: state.importProfiles
 });
 
 // Parses a backup file into a full state, keeping current values for any
@@ -57,6 +59,8 @@ export const parseBackup = (text, current) => {
     tags: pick(d.availableTags, current.tags),
     streak: { count: pick(d.streak, current.streak.count), lastDate: pick(d.streakDate, current.streak.lastDate) },
     achievements: pick(d.achievements, current.achievements),
+    importRules: pick(d.importRules, current.importRules),
+    importProfiles: pick(d.importProfiles, current.importProfiles),
     prefs: {
       ...current.prefs,
       dailyLimit: pick(d.dailySpendLimit, current.prefs.dailyLimit),
@@ -75,7 +79,7 @@ const csvCell = (value) => {
 };
 
 export const transactionsToCsv = (transactions) => {
-  const header = ['Date', 'Description', 'Category', 'Amount', 'Type', 'Recurring', 'Tags'];
+  const header = ['Date', 'Description', 'Category', 'Amount', 'Type', 'Recurring', 'Tags', 'Account'];
   const rows = transactions
     .filter((t) => t.type !== 'system')
     .map((t) => [
@@ -85,7 +89,8 @@ export const transactionsToCsv = (transactions) => {
       Number(t.amount) || 0,
       t.type || 'expense',
       t.recurring || 'none',
-      (t.tags || []).join(' ')
+      (t.tags || []).join(' '),
+      t.account || ''
     ]);
   return [header, ...rows].map((r) => r.map(csvCell).join(',')).join('\n');
 };

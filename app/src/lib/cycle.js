@@ -123,6 +123,21 @@ export const renewCycles = (state, now = new Date()) => {
   };
 };
 
+// Start of the budget period a category is currently in. Weekly budgets
+// follow the cycle; monthly ones started at the first cycle of this month.
+export const periodStartFor = (category, cycleStartDate) => {
+  const start = new Date(cycleStartDate);
+  if (category?.frequency !== 'monthly') return start;
+  let s = start;
+  for (let i = 0; i < 6; i += 1) {
+    const prev = new Date(s);
+    prev.setDate(prev.getDate() - 7);
+    if (prev.getMonth() !== start.getMonth()) break;
+    s = prev;
+  }
+  return s;
+};
+
 // What each category would hold after the next renewal (for the cycle sheet).
 export const rolloverPreview = (categories, cycleStartDate) => {
   const start = new Date(cycleStartDate);

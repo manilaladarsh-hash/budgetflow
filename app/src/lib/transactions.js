@@ -26,7 +26,8 @@ export const sortByDateDesc = (txs) =>
 // category balances. Legacy transfers carry amount 0 and no ids, so they are
 // no-ops; new transfers record fromId/toId and can be reversed.
 export const applyTransactionImpact = (categories, tx, direction = 1) => {
-  if (!tx) return categories;
+  // Imported entries from before the current budget period are history only.
+  if (!tx || tx.affectsBalance === false) return categories;
   const amt = Number(tx.amount) || 0;
   if (txType(tx) === 'transfer') {
     if (!tx.fromId || !tx.toId || !amt) return categories;

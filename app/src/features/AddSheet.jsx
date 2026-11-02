@@ -41,7 +41,8 @@ export default function AddSheet({ state: open, onClose }) {
       categoryId: open.categoryId || p.categoryId || '',
       day: p.day || localDayKey(new Date()),
       recurring: p.recurring || 'none',
-      tags: p.tags || []
+      tags: p.tags || [],
+      extra: p.extra || null
     });
     setLines([blankLine(), blankLine()]);
     setSplitLabel('');
@@ -85,7 +86,8 @@ export default function AddSheet({ state: open, onClose }) {
       category,
       date: isoForDay(form.day, new Date()),
       recurring: form.recurring,
-      tags: form.tags
+      tags: form.tags,
+      extra: form.extra || {}
     });
     actions.addTransactions([tx]);
     onClose();

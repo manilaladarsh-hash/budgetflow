@@ -94,6 +94,7 @@ export function TxRow({ tx, onClick, showDate = false }) {
   const amountText = isSystem ? '' : t === 'income' ? money(amount, { signed: true }) : t === 'transfer' ? (amount ? money(amount) : '') : money(-amount);
   const meta = [
     t === 'transfer' ? 'Transfer' : isSystem ? 'Cycle' : (category?.name || tx.categoryName || 'Uncategorised'),
+    tx.account,
     showDate ? new Date(tx.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : formatTime(tx.date),
     ...(tx.tags || []).slice(0, 2).map((x) => `#${x}`)
   ].filter(Boolean).join(' · ');

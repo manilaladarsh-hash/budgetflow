@@ -28,6 +28,8 @@ export const KEYS = {
   aiModel: 'ai_model',
   theme: 'theme_pref',
   cloudSync: 'cloud_sync',
+  importRules: 'import_rules_v1',
+  importProfiles: 'import_profiles_v1',
   snapshot: 'bf_pre_v4_snapshot'
 };
 
@@ -148,6 +150,8 @@ export const normalizeState = (raw, now = new Date()) => {
     tags: Array.isArray(raw.tags) ? raw.tags.filter((t) => typeof t === 'string') : [...DEFAULT_TAGS],
     streak: { count: Math.max(0, Math.round(num(raw.streak?.count))), lastDate: raw.streak?.lastDate || null },
     achievements: list(raw.achievements),
+    importRules: list(raw.importRules).filter((r) => r && r.match),
+    importProfiles: raw.importProfiles && typeof raw.importProfiles === 'object' && !Array.isArray(raw.importProfiles) ? raw.importProfiles : {},
     prefs: {
       onboarded: !!raw.prefs?.onboarded,
       name: raw.prefs?.name || '',
@@ -179,6 +183,8 @@ export const loadState = (now = new Date()) => {
     tags: readJson(KEYS.tags, null) ?? [...DEFAULT_TAGS],
     streak: { count: readNumber(KEYS.streak, 0), lastDate: readString(KEYS.streakDate, '') || null },
     achievements: readJson(KEYS.achievements, []),
+    importRules: readJson(KEYS.importRules, []),
+    importProfiles: readJson(KEYS.importProfiles, {}),
     prefs: {
       onboarded: !!readString(KEYS.onboarded, ''),
       name: readString(KEYS.name, ''),
@@ -212,6 +218,8 @@ const writers = {
   tags: (s) => [[KEYS.tags, JSON.stringify(s.tags)]],
   streak: (s) => [[KEYS.streak, String(s.streak.count)], [KEYS.streakDate, s.streak.lastDate || '']],
   achievements: (s) => [[KEYS.achievements, JSON.stringify(s.achievements)]],
+  importRules: (s) => [[KEYS.importRules, JSON.stringify(s.importRules)]],
+  importProfiles: (s) => [[KEYS.importProfiles, JSON.stringify(s.importProfiles)]],
   prefs: (s) => [
     [KEYS.onboarded, s.prefs.onboarded ? 'true' : null],
     [KEYS.name, s.prefs.name],

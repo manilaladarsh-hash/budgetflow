@@ -10,6 +10,7 @@ import { localDayKey } from '../lib/dates.js';
 import { Card, SectionHeader, Field, TextInput, MoneyInput, Segmented, Toggle, Button, Chip, IconButton, cx } from '../ui/primitives.jsx';
 import { CategoryBadge, useMoney, useSortedCategories } from './shared.jsx';
 import CategoryEditor from './CategoryEditor.jsx';
+import { ImportSection, ApplePaySection } from './SettingsExtras.jsx';
 
 const SYNC_TEXT = {
   synced: 'Backed up to the cloud for this browser.',
@@ -206,6 +207,10 @@ export default function Settings() {
           </div>
         </Card>
       </section>
+
+      <ImportSection />
+
+      <ApplePaySection />
 
       <section>
         <SectionHeader title="Sync & data" />

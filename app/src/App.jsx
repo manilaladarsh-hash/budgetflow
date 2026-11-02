@@ -12,13 +12,15 @@ import Insights from './features/Insights.jsx';
 import Plan from './features/Plan.jsx';
 import Settings from './features/Settings.jsx';
 import Assistant from './features/Assistant.jsx';
+import Import from './features/Import.jsx';
+import QuickAddLink from './features/QuickAddLink.jsx';
 import Onboarding from './features/Onboarding.jsx';
 import AddSheet from './features/AddSheet.jsx';
 import TransactionSheet from './features/TransactionSheet.jsx';
 import CycleSheet from './features/CycleSheet.jsx';
 
-const ROUTES = ['home', 'activity', 'insights', 'plan', 'settings', 'assistant'];
-const TITLES = { home: null, activity: 'Activity', insights: 'Insights', plan: 'Plan', settings: 'Settings', assistant: 'Assistant' };
+const ROUTES = ['home', 'activity', 'insights', 'plan', 'settings', 'assistant', 'import'];
+const TITLES = { home: null, activity: 'Activity', insights: 'Insights', plan: 'Plan', settings: 'Settings', assistant: 'Assistant', import: 'Import' };
 const routeFromHash = () => {
   const r = window.location.hash.replace(/^#\/?/, '').split('?')[0];
   return ROUTES.includes(r) ? r : 'home';
@@ -87,7 +89,7 @@ function Shell() {
     return <Onboarding />;
   }
 
-  const Screen = { home: Home, activity: Activity, insights: Insights, plan: Plan, settings: Settings, assistant: Assistant }[route];
+  const Screen = { home: Home, activity: Activity, insights: Insights, plan: Plan, settings: Settings, assistant: Assistant, import: Import }[route];
   const msLeft = Math.max(0, cycleEndFor(state.cycleStartDate) - now);
 
   return (
@@ -103,6 +105,7 @@ function Shell() {
       <AddSheet state={addSheet} onClose={() => setAddSheet(null)} />
       <TransactionSheet tx={txSheet} onClose={() => setTxSheet(null)} />
       <CycleSheet open={cycleOpen} onClose={() => setCycleOpen(false)} />
+      <QuickAddLink />
     </NavContext.Provider>
   );
 }

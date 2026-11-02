@@ -13,6 +13,28 @@ A calm, phone-first budget tracker. Split your money into weekly or monthly budg
 - **Plan:** savings goals (deposits, withdrawals, optional target dates), monthly bills, subscriptions, net worth and a wishlist. Marking a bill or subscription paid can also log it as an expense.
 - **Settings** (gear icon): name, currency, theme, budgets (add, edit, reorder), daily limit and large-expense alert, tags, the optional AI key, cloud backup, and data tools.
 
+### Import from your banks and cards
+
+**Activity → Import** (the upload icon) reads transaction files from any bank or card: CSV, OFX, QFX or QBO. Download them from each bank's website and import them all at once.
+- **Detection:** works out the columns, the date format and whether purchases are shown as plus or minus.
+- **Auto-sort:** sorts each entry into a budget using your rules, your past entries and a built-in list of common merchants. Pick a budget for a new merchant once and it's remembered; you can manage these under **Settings → Auto-sort rules**.
+- **Skips:** card payments, transfers between your own accounts, rows already imported, and purchases you already logged by hand or with Apple Pay.
+- **Card labels:** each entry is tagged with the card or account it came from. Activity can filter by card.
+- **Older entries:** entries from before the current budget period go into history (Insights) without changing this week's balances.
+- **Undo:** the whole import can be undone in one tap.
+
+Files are read in the browser and never uploaded.
+
+### Apple Pay auto-log (iPhone)
+
+**Settings → Apple Pay auto-log** walks you through a one-time Shortcuts automation. It opens a link like this after every Apple Pay purchase:
+
+```
+https://manilaladarsh-hash.github.io/budgetflow/#/add?auto=1&amount=6.45&merchant=Starbucks&card=Amex
+```
+
+Known merchants are logged instantly to the right budget. New ones open a pre-filled entry so you can pick the budget, and BudgetFlow remembers it. A double-fired link is ignored. Shortcuts opens links in Safari, so use BudgetFlow in Safari rather than as a Home Screen app for this, because iOS keeps their data separate.
+
 ### How cycles work
 
 Every Sunday at midnight, weekly budgets refill. Up to 50% of a budget's unspent money carries over; overspending carries over in full. Monthly budgets refill on the first cycle of a new month. Repeating entries are added once per cycle. If the app wasn't opened for a while, missed cycles are caught up when it next opens. Tap the countdown in the header to preview the next renewal.
@@ -53,11 +75,13 @@ To check cloud sync end to end, run `E2E_CLOUD=1 npm run e2e`. This creates one 
 Project layout:
 
 ```
-app/src/lib/       pure logic: cycles, transactions, analytics, storage, backup, Gemini, cloud sync
+app/src/lib/       pure logic: cycles, transactions, analytics, storage, backup, statement import,
+                   merchant rules, quick-add links, Gemini, cloud sync
 app/src/state/     app store (persistence, sync, cycle renewal) and navigation context
 app/src/ui/        design-system components, icons, toasts/confirm dialogs
 app/src/features/  screens and sheets
 tests/unit/        Vitest tests for app/src/lib
+tests/fixtures/    sample bank/card exports (made-up data) used by the tests
 tests/e2e/         Playwright flows and a legacy-data fixture
 ```
 

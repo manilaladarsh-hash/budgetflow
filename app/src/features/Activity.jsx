@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Search, X, SlidersHorizontal, Download, Receipt } from 'lucide-react';
+import { Search, X, SlidersHorizontal, Download, Receipt, Upload } from 'lucide-react';
 import { useStore } from '../state/store.jsx';
 import { useNav } from '../state/nav.js';
 import { localDayKey, relativeDayLabel } from '../lib/dates.js';
@@ -9,7 +9,7 @@ import { Card, Chip, EmptyState, Sheet, Button, Field, TextInput, Segmented, Ico
 import { TxRow, useMoney, useSortedCategories, CategoryPicker } from './shared.jsx';
 
 const PAGE = 60;
-const emptyFilters = { type: 'all', categoryId: '', tags: [], from: '', to: '', showSystem: false };
+const emptyFilters = { type: 'all', categoryId: '', account: '', tags: [], from: '', to: '', showSystem: false };
 
 export default function Activity() {
   const { state } = useStore();
@@ -28,6 +28,7 @@ export default function Activity() {
       if (type === 'system' && !filters.showSystem) return false;
       if (filters.type !== 'all' && type !== filters.type) return false;
       if (filters.categoryId && t.categoryId !== filters.categoryId && t.fromId !== filters.categoryId && t.toId !== filters.categoryId) return false;
+      if (filters.account && t.account !== filters.account) return false;
       const day = localDayKey(t.date);
       if (filters.from && day < filters.from) return false;
       if (filters.to && day > filters.to) return false;
@@ -58,7 +59,8 @@ export default function Activity() {
     return out;
   }, [filtered, limit]);
 
-  const activeCount = (filters.type !== 'all') + !!filters.categoryId + filters.tags.length + !!filters.from + !!filters.to + filters.showSystem;
+  const accounts = useMemo(() => [...new Set(state.transactions.map((t) => t.account).filter(Boolean))].sort(), [state.transactions]);
+  const activeCount = (filters.type !== 'all') + !!filters.categoryId + !!filters.account + filters.tags.length + !!filters.from + !!filters.to + filters.showSystem;
   const activeCategory = categories.find((c) => c.id === filters.categoryId);
   const exportCsv = () => downloadFile(`budgetflow-${localDayKey()}.csv`, transactionsToCsv(filtered), 'text/csv;charset=utf-8');
 
@@ -83,13 +85,15 @@ export default function Activity() {
           <SlidersHorizontal size={18} />
           {activeCount > 0 && <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-accent text-accent-fg text-[11px] font-semibold inline-flex items-center justify-center">{activeCount}</span>}
         </IconButton>
-        <IconButton label="Export as CSV" variant="secondary" onClick={exportCsv} className="rounded-2xl"><Download size={18} /></IconButton>
+        <IconButton label="Import statements" variant="secondary" onClick={() => nav.go('import')} className="rounded-2xl"><Upload size={18} /></IconButton>
+        <IconButton label="Export as CSV" variant="secondary" onClick={exportCsv} className="rounded-2xl hidden sm:inline-flex"><Download size={18} /></IconButton>
       </div>
 
       <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4">
         {[['all', 'All'], ['expense', 'Expenses'], ['income', 'Income'], ['transfer', 'Transfers']].map(([v, l]) => (
           <Chip key={v} active={filters.type === v} onClick={() => setFilters((f) => ({ ...f, type: v }))}>{l}</Chip>
         ))}
+        {filters.account && <Chip active onClick={() => setFilters((f) => ({ ...f, account: '' }))}>{filters.account} <X size={14} /></Chip>}
         {activeCategory && <Chip active onClick={() => setFilters((f) => ({ ...f, categoryId: '' }))}>{activeCategory.name} <X size={14} /></Chip>}
         {filters.tags.map((tag) => <Chip key={tag} active onClick={() => setFilters((f) => ({ ...f, tags: f.tags.filter((t) => t !== tag) }))}>#{tag} <X size={14} /></Chip>)}
         {(filters.from || filters.to) && <Chip active onClick={() => setFilters((f) => ({ ...f, from: '', to: '' }))}>{filters.from || '…'} → {filters.to || '…'} <X size={14} /></Chip>}
@@ -128,12 +132,12 @@ export default function Activity() {
         <Button variant="secondary" className="w-full" onClick={() => setLimit((l) => l + PAGE)}>Show more ({filtered.length - limit} left)</Button>
       )}
 
-      <FilterSheet open={filterOpen} onClose={() => setFilterOpen(false)} filters={filters} setFilters={setFilters} categories={categories} tags={state.tags} />
+      <FilterSheet open={filterOpen} onClose={() => setFilterOpen(false)} filters={filters} setFilters={setFilters} categories={categories} tags={state.tags} accounts={accounts} onExport={exportCsv} />
     </div>
   );
 }
 
-function FilterSheet({ open, onClose, filters, setFilters, categories, tags }) {
+function FilterSheet({ open, onClose, filters, setFilters, categories, tags, accounts, onExport }) {
   const set = (patch) => setFilters((f) => ({ ...f, ...patch }));
   return (
     <Sheet
@@ -171,7 +175,16 @@ function FilterSheet({ open, onClose, filters, setFilters, categories, tags }) {
             </div>
           </div>
         )}
+        {accounts.length > 0 && (
+          <div>
+            <p className="text-[13px] font-medium text-muted mb-2">Card / account</p>
+            <div className="flex flex-wrap gap-2">
+              {accounts.map((a) => <Chip key={a} active={filters.account === a} onClick={() => set({ account: filters.account === a ? '' : a })}>{a}</Chip>)}
+            </div>
+          </div>
+        )}
         <Chip active={filters.showSystem} onClick={() => set({ showSystem: !filters.showSystem })}>Show cycle renewals</Chip>
+        <Button variant="secondary" className="w-full sm:hidden" onClick={onExport}><Download size={17} /> Export these as CSV</Button>
       </div>
     </Sheet>
   );

@@ -218,7 +218,7 @@ describe('backup', () => {
   });
   it('escapes CSV cells', () => {
     const csv = transactionsToCsv([{ date: '2026-10-01T12:00:00Z', description: 'a, "b"', categoryName: '=cmd', amount: 3, type: 'expense' }]);
-    expect(csv.split('\n')[1]).toBe('2026-10-01,"a, ""b""","=cmd",3,expense,none,');
+    expect(csv.split('\n')[1]).toBe('2026-10-01,"a, ""b""","=cmd",3,expense,none,,');
   });
 });
 
