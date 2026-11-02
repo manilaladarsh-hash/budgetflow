@@ -1,7 +1,7 @@
 // Bank / card statement import: CSV (any bank layout) and OFX/QFX/QBO.
 // Pure functions only — the UI lives in features/Import.jsx.
 
-import { cleanMerchant, merchantKey, suggestCategory, historyIndex } from './merchants.js';
+import { cleanMerchant, merchantKey, suggestCategory, historyIndex, conceptForText, categoryForConcept } from './merchants.js';
 import { dateFromDayKey, localDayKey } from './dates.js';
 import { roundMoney } from './money.js';
 import { buildTransaction, newId } from './transactions.js';
@@ -120,22 +120,23 @@ export const parseMoney = (value) => {
 // ------------------------------------------------------ Column roles ----
 
 const ROLE_TESTS = [
-  ['date', /^(?:transaction date|trans\.? date|date of transaction|date de (?:la )?transaction|date d'op[ée]ration|date)$/],
-  ['postedDate', /^(?:posted date|posting date|date posted|post date|date processed|date de comptabilisation|date d'inscription)$/],
-  ['description', /^(?:description|description 1|merchant|merchant name|payee|name|details|transaction details|transaction description|narrative|libell[ée]|description de la transaction|nom)$/],
+  ['date', /^(?:transaction date|trans\.? date|date of transaction|date de (?:la )?transaction|date d'op[ée]ration|effective date|date)$/],
+  ['postedDate', /^(?:posted date|posting date|date posted|post date|date processed|settlement date|date de comptabilisation|date d'inscription)$/],
+  ['description', /^(?:description|description 1|merchant|merchant name|payee|name|details|transaction details|transaction description|transactions|narrative|libell[ée]|description de la transaction|nom)$/],
   ['description2', /^(?:description 2|sub-?description|memo|note|notes|extended details|additional info|détails)$/],
-  ['amount', /^(?:amount|cad\$?|amount \(cad\)|amount \(\$\)|transaction amount|montant|amount cad|net amount|value)$/],
-  ['debit', /^(?:debit|debits|withdrawal|withdrawals|withdrawal amount|money out|debit amount|charges?|retrait|retraits|d[ée]bit)$/],
-  ['credit', /^(?:credit|credits|deposit|deposits|deposit amount|money in|credit amount|payments? ?(?:& )?credits?|d[ée]p[ôo]t|d[ée]p[ôo]ts|cr[ée]dit)$/],
+  ['amount', /^(?:amount|cad\$?|amount \(cad\)|amount \(\$\)|transaction amount|montant|amount cad|net amount|net cash amount|value)$/],
+  ['debit', /^(?:debit|debits|withdrawal|withdrawals|withdrawal amount|money out|funds out|debit amount|charges?|retrait|retraits|d[ée]bit)$/],
+  ['credit', /^(?:credit|credits|deposit|deposits|deposit amount|money in|funds in|credit amount|payments? ?(?:& )?credits?|d[ée]p[ôo]t|d[ée]p[ôo]ts|cr[ée]dit)$/],
   ['balance', /^(?:balance|running balance|solde)$/],
   ['category', /^(?:category|cat[ée]gorie|merchant category)$/],
   ['type', /^(?:type|transaction type|type of transaction|credit\/debit|debit\/credit|transaction|dr\/cr)$/],
   ['currency', /^(?:currency|devise)$/],
-  ['ignore', /^(?:account|account number|account type|card|card no\.?|card number|card #|card member|cardmember|item #|item|cheque number|check number|reference|reference number|status|filter|usd\$?|foreign amount|exchange rate)$/]
+  ['status', /^(?:status|transaction status|statut)$/],
+  ['ignore', /^(?:account|account id|account number|account type|card|card no\.?|card number|card #|first bank card|card member|cardmember|item #|item|cheque number|check number|reference|reference number|filter|usd\$?|foreign amount|exchange rate)$/]
 ];
 
 const roleFor = (header) => {
-  const h = String(header || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const h = String(header || '').toLowerCase().replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
   const hit = ROLE_TESTS.find(([, re]) => re.test(h));
   return hit ? hit[0] : null;
 };
@@ -208,12 +209,15 @@ export const detectBank = ({ header = [], filename = '', ofxOrg = '', width = 0 
     .find(([k]) => org.includes(k));
   if (fromOrg) return fromOrg[1];
   if (has('description 1') && (has('cad$') || has('usd$'))) return 'RBC';
+  if (has('net_cash_amount') || has('activity_sub_type')) return 'Wealthsimple';
+  if (has('first bank card')) return 'BMO bank';
+  if (has('funds out') && has('funds in')) return 'Simplii';
   if (has('date processed') || has('cardmember') || has('card member')) return 'Amex';
   if (has('card no.') && has('debit') && has('credit')) return 'Capital One';
-  if (has('item #') && has('transaction amount')) return 'BMO';
+  if (has('item #') && has('transaction amount')) return 'BMO Mastercard';
   if (has('transaction') && has('name') && has('memo')) return 'Tangerine';
   if (has('sub-description') || has('type of transaction')) return 'Scotiabank';
-  const fromName = [['tangerine', 'Tangerine'], ['amex', 'Amex'], ['accountactivity', 'TD'], ['cibc', 'CIBC'], ['rbc', 'RBC'], ['csv38', 'RBC'], ['scotia', 'Scotiabank'], ['bmo', 'BMO'], ['simplii', 'Simplii'], ['capitalone', 'Capital One'], ['wealthsimple', 'Wealthsimple'], ['eq', 'EQ Bank']]
+  const fromName = [['neo', 'Neo Mastercard'], ['rogers', 'Rogers Mastercard'], ['tangerine', 'Tangerine'], ['amex', 'Amex'], ['accountactivity', 'TD'], ['cibc', 'CIBC'], ['rbc', 'RBC'], ['csv38', 'RBC'], ['scotia', 'Scotiabank'], ['bmo', 'BMO'], ['simplii', 'Simplii'], ['capitalone', 'Capital One'], ['wealthsimple', 'Wealthsimple'], ['eq', 'EQ Bank']]
     .find(([k]) => f.includes(k));
   if (fromName) return fromName[1];
   if (!header.length && width === 5) return 'TD';
@@ -253,15 +257,46 @@ const parseOfx = (text) => {
 
 // --------------------------------------------------------- Main parse ----
 
-const PAYMENT_RE = /PAYMENT\s*[-–]?\s*THANK\s*YOU|PAIEMENT\s*[-–]?\s*MERCI|PAYMENT\s+RECEIVED|PAYMENT\s+-\s+RECEIVED|AUTO-?\s?PAY|PAYMENT FROM|^PAYMENT$|^PAIEMENT$|ONLINE (?:BANKING )?PAYMENT|(?:VISA|MASTERCARD|MC|AMEX|AMERICAN EXPRESS|CREDIT CARD|CC|CARD)\s*(?:PREAUTH(?:ORIZED)?\s*)?(?:PYMT|PMT|PAYMENT|PAY)\b|(?:PYMT|PMT|PAYMENT)\s*(?:TO|-)?\s*(?:VISA|MASTERCARD|AMEX|AMERICAN EXPRESS|CAPITAL ONE|MBNA|ROGERS BANK|PC FINANCIAL|TRIANGLE|TANGERINE CC|SCOTIA ?(?:VISA|CARD)|CIBC ?(?:VISA|MC)|TD ?VISA|RBC ?(?:VISA|MC)|BMO ?MC)|BILL PAYMENT.*(?:VISA|MASTERCARD|AMEX|AMERICAN EXPRESS|CAPITAL ONE|MBNA|CREDIT CARD)|CARD\/LOC PAY|CREDIT CARD\/LOC|^MB-CREDIT CARD/;
-const TRANSFER_RE = /^(?:TFR|TRF|WWW TRF|TRANSFER|INTERNET TRANSFER|ONLINE TRANSFER|MOBILE TRANSFER|MB-TRANSFER|PTS TO|PTS FRM|SWEEP)\b|TRANSFER (?:TO|FROM) (?:SAVINGS|CHEQUING|CHECKING|ACCOUNT|\d)|VIREMENT (?:ENTRE|À|DE) (?:COMPTES?|ÉPARGNE)/;
+// Paying off a credit card: shows up on both the bank and the card side.
+const CARD_ISSUERS = '(?:NEO(?: FINANCIAL)?|ROGERS\\s?(?:BK|BANK)(?:\\s?MC)?|CAPITAL\\s?ONE(?:\\s?(?:MC|MASTERCARD))?|SCOTIA(?:BANK)?\\s?(?:VISA|MC|CARD|AMEX)|AMEX|AMERICAN EXPRESS|MBNA|TRIANGLE|PC\\s?(?:FINANCIAL\\s?)?MC|BMO\\s?(?:MC|MASTERCARD)|CIBC\\s?(?:VISA|MC)|TD\\s?VISA|RBC\\s?(?:VISA|MC)|TANGERINE\\s?(?:MC|CC)|HOME TRUST|BRIM|KOHO)';
+const PAYMENT_PATTERNS = [
+  /PAYMENT\s*[-–]?\s*(?:RECEIVED\s*[-–]?\s*)?THANK\s*YOU|PAIEMENT\s*[-–]?\s*MERCI|PAYMENT\s+RECEIVED|AUTO-?\s?PAY|PAYMENT FROM|^PAYMENT$|^PAIEMENT$|ONLINE (?:BANKING )?PAYMENT/,
+  /(?:VISA|MASTERCARD|MC|AMEX|AMERICAN EXPRESS|CREDIT CARD|CC|CARD)\s*(?:PREAUTH(?:ORIZED)?\s*)?(?:PYMT|PMT|PAYMENT|PAY)\b/,
+  new RegExp(`(?:PYMT|PMT|PAYMENT|BILL PAYMENT)\\s*(?:TO|-)?\\s*.*${CARD_ISSUERS}`),
+  new RegExp(`^${CARD_ISSUERS}$`), // BMO shows "[CW]NEO", "[CW]ROGERS BK MC"
+  /^TRSF FROM\/DE ACCT/, // BMO Mastercard: paid from a BMO bank account
+  /^TF\s+\d{12,}/, // BMO bank: transfer to a BMO card number
+  /CARD\/LOC PAY|CREDIT CARD\/LOC|^MB-CREDIT CARD/
+];
+// Moving money between your own accounts or into investments.
+const TRANSFER_PATTERNS = [
+  /^(?:TFR|TRF|WWW TRF|TRANSFER|INTERNET TRANSFER|ONLINE TRANSFER|MOBILE TRANSFER|MB-TRANSFER|PTS TO|PTS FRM|SWEEP)\b/,
+  /TRANSFER (?:TO|FROM) (?:SAVINGS|CHEQUING|CHECKING|ACCOUNT|\d)|VIREMENT (?:ENTRE|À|DE) (?:COMPTES?|ÉPARGNE)/,
+  /^TF\s+\d{4}#/, // BMO: between your own BMO accounts
+  /\b(?:TFSA|RRSP|FHSA|RESP)\s*(?:CONT|CONTRIBUTION|DEP)|WS INVESTMENTS|INV\/PLA|QUESTRADE|WEALTHSIMPLE INV/
+];
+
+const stripBankCodes = (s) => String(s || '').toUpperCase().replace(/^\s*\[[A-Z]{2}\]\s*/, '').trim();
 
 export const classifyDescription = (raw) => {
-  const s = String(raw || '').toUpperCase();
-  if (PAYMENT_RE.test(s)) return 'card-payment';
-  if (TRANSFER_RE.test(s)) return 'transfer';
+  const s = stripBankCodes(raw).replace(/\s+/g, ' ');
+  if (PAYMENT_PATTERNS.some((re) => re.test(s))) return 'card-payment';
+  if (TRANSFER_PATTERNS.some((re) => re.test(s))) return 'transfer';
   return null;
 };
+
+// E-transfers to or from yourself (your name from Settings) are transfers.
+const ETRANSFER_RE = /E-?\s?TRA?NS?FE?R|ETRNSFR|E-TFR|VIREMENT INTERAC/;
+export const isSelfTransfer = (raw, ownerName) => {
+  const s = stripBankCodes(raw);
+  if (!ETRANSFER_RE.test(s)) return false;
+  const tokens = String(ownerName || '').toUpperCase().split(/[^A-Z]+/).filter((t) => t.length >= 3);
+  return tokens.length > 0 && tokens.some((t) => new RegExp(`\\b${t}\\b`).test(s));
+};
+
+// Rows that look like money moving (used to pair transfers across files).
+const MOVEMENT_RE = /E-?\s?TRA?NS?FE?R|ETRNSFR|TRANSFER|\bTF\b|\bEFT\b|^DEPOSIT|DEPOSIT\b|INTERAC|WS INVESTMENTS|INV\/PLA|WEALTHSIMPLE|\bSEND\b|MOBILE CHEQUE/;
+export const looksLikeMovement = (raw) => MOVEMENT_RE.test(stripBankCodes(raw));
 
 // Parse one file into normalised rows. `options` may carry user overrides:
 // { dateOrder, flip, columns }.
@@ -319,10 +354,12 @@ export const parseStatement = (text, filename = '', options = {}) => {
       // Some exports put "Debit"/"Credit" in a type column next to an unsigned amount.
       if (signed !== null && map.type !== undefined && map.amount !== undefined) {
         const t = String(r[map.type] || '').toUpperCase();
-        if (/^(DEBIT|DR|D|WITHDRAWAL|PURCHASE)$/.test(t)) signed = -Math.abs(signed);
-        if (/^(CREDIT|CR|C|DEPOSIT)$/.test(t)) signed = Math.abs(signed);
+        if (/^(DEBIT|DR|D|WITHDRAWAL|PURCHASE|EXPENSE)$/.test(t)) signed = -Math.abs(signed);
+        if (/^(CREDIT|CR|C|DEPOSIT|INCOME|REFUND)$/.test(t)) signed = Math.abs(signed);
       }
       const desc = r[map.description] ?? '';
+      const status = map.status !== undefined ? String(r[map.status] || '') : '';
+      if (/declin|fail|cancel|revers|void|reject/i.test(status)) return { declined: true };
       return {
         date: parseDate(r[map.date], order),
         signed,
@@ -332,17 +369,25 @@ export const parseStatement = (text, filename = '', options = {}) => {
       };
     });
     if (map.amount === undefined) expenseSign = -1; // debit/credit columns were normalised above
+    // A Debit/Credit type column also makes the sign explicit.
+    if (map.type !== undefined) {
+      const typed = body.filter((r) => /^(DEBIT|DR|D|WITHDRAWAL|PURCHASE|EXPENSE|CREDIT|CR|C|DEPOSIT|INCOME|REFUND)$/i.test(String(r[map.type] || '').trim())).length;
+      if (typed >= body.length * 0.5) expenseSign = -1;
+    }
     if (ambiguousDates) warnings.push('dates-ambiguous');
     width = width || 0;
     raw.dateOrder = order;
   }
 
-  const rows = raw.filter((r) => r.date && r.signed !== null && r.signed !== 0 && (r.description || r.extra));
-  const dropped = raw.length - rows.length;
+  const declined = raw.filter((r) => r.declined).length;
+  const rows = raw.filter((r) => !r.declined && r.date && r.signed !== null && r.signed !== 0 && (r.description || r.extra));
+  const dropped = raw.length - rows.length - declined;
 
-  // Which sign means "money out"? Card exports often show purchases as
-  // positive numbers. Use the majority sign, ignoring card payments.
-  let inferred = expenseSign;
+  // Which sign means "money out"? Some banks are known; otherwise use the
+  // majority sign (card exports often show purchases as positive numbers).
+  const bank = detectBank({ header, filename, ofxOrg: org, width });
+  const KNOWN_PURCHASE_SIGN = { 'BMO Mastercard': 1, Amex: 1, 'Neo Mastercard': -1, Wealthsimple: -1, RBC: -1, Tangerine: -1 };
+  let inferred = expenseSign ?? KNOWN_PURCHASE_SIGN[bank] ?? null;
   if (inferred === null) {
     const counted = rows.filter((r) => !classifyDescription(`${r.description} ${r.extra}`));
     const neg = counted.filter((r) => r.signed < 0).length;
@@ -380,7 +425,7 @@ export const parseStatement = (text, filename = '', options = {}) => {
   return {
     format,
     signature,
-    bank: detectBank({ header, filename, ofxOrg: org, width }),
+    bank,
     isCard,
     header,
     columns: map,
@@ -389,6 +434,7 @@ export const parseStatement = (text, filename = '', options = {}) => {
     flipped: !!options.flip,
     rows: normalised,
     dropped,
+    declined,
     from: days[0] || null,
     to: days[days.length - 1] || null,
     warnings
@@ -419,7 +465,7 @@ export const buildReview = ({ files, state, now = new Date() }) => {
   const usedManual = new Set();
   const seen = new Set();
   const outKeys = new Set();
-  files.forEach((f) => f.parsed.rows.forEach((r) => { if (r.direction === 'out') outKeys.add(r.key); }));
+  files.forEach((f) => f.parsed.rows.forEach((r) => { if (r.direction === 'out' && r.key) outKeys.add(r.key); }));
   const today = localDayKey(now);
 
   const items = [];
@@ -452,6 +498,8 @@ export const buildReview = ({ files, state, now = new Date() }) => {
         item.status = 'skipped'; item.reason = 'Card payment'; item.kind = 'payment';
       } else if (special === 'transfer') {
         item.status = 'skipped'; item.reason = 'Transfer between your accounts'; item.kind = 'payment';
+      } else if (isSelfTransfer(row.raw, state.prefs?.name)) {
+        item.status = 'skipped'; item.reason = 'E-transfer to/from yourself'; item.kind = 'payment';
       }
       seen.add(fingerprint);
 
@@ -479,11 +527,11 @@ export const buildReview = ({ files, state, now = new Date() }) => {
       if (row.direction === 'in' && item.kind === 'income') {
         // Credits that look like refunds go back to the merchant's budget;
         // other deposits (pay, e-transfers) only if a rule says so.
-        const looksLikeRefund = outKeys.has(row.key) || history.has(row.key) || suggestion?.source === 'rule'
+        const looksLikeRefund = (!!row.key && (outKeys.has(row.key) || history.has(row.key))) || suggestion?.source === 'rule'
           || /\b(?:REFUND|RETURN|REMBOURSEMENT|CREDIT VOUCHER|REVERSAL)\b/i.test(row.raw);
         item.kind = looksLikeRefund ? 'refund' : 'income';
       }
-      if (suggestion && !suggestion.skip && (item.kind !== 'income' || suggestion.source === 'rule')) {
+      if (suggestion && !suggestion.skip && item.kind !== 'payment' && (item.kind !== 'income' || suggestion.source === 'rule')) {
         item.suggestion = suggestion;
         item.categoryId = suggestion.categoryId;
       }
@@ -496,7 +544,39 @@ export const buildReview = ({ files, state, now = new Date() }) => {
       items.push(item);
     });
   });
+  pairTransfers(items);
   return items.sort((a, b) => b.date.localeCompare(a.date) || a.merchant.localeCompare(b.merchant));
+};
+
+// Money leaving one of your accounts and arriving in another (same amount,
+// within a few days, both described as a transfer/e-transfer/deposit) is a
+// transfer, not spending or income. Only pairs rows from different files.
+export const pairTransfers = (items) => {
+  // A side that's already known to be a transfer (e.g. "[DS]WS INVESTMENTS")
+  // can still claim its other half in another account.
+  const isTransferSide = (i) => i.kind === 'payment' && /Transfer|yourself/.test(i.reason);
+  const candidate = (i) => (i.status !== 'skipped' || isTransferSide(i)) && (looksLikeMovement(i.raw) || isTransferSide(i));
+  const used = new Set();
+  const mark = (it, reason) => {
+    if (it.kind === 'payment') return;
+    Object.assign(it, { status: 'skipped', reason, kind: 'payment', include: false, categoryId: null, suggestion: null });
+  };
+  const ins = items.filter((i) => i.direction === 'in' && candidate(i));
+  const outs = items.filter((i) => i.direction === 'out' && candidate(i));
+  // Pair the cheapest-to-explain rows first: open rows with known transfers.
+  ins.sort((a, b) => isTransferSide(a) - isTransferSide(b)).forEach((inItem) => {
+    if (used.has(inItem.id)) return;
+    const match = outs
+      .filter((o) => !used.has(o.id) && o.fileId !== inItem.fileId && !(isTransferSide(o) && isTransferSide(inItem))
+        && Math.abs(o.amount - inItem.amount) < 0.01 && Math.abs(dayDiff(o.date, inItem.date)) <= 4)
+      .sort((a, b) => Math.abs(dayDiff(a.date, inItem.date)) - Math.abs(dayDiff(b.date, inItem.date)))[0];
+    if (!match) return;
+    used.add(match.id);
+    used.add(inItem.id);
+    mark(match, 'Transfer between your accounts');
+    mark(inItem, 'Transfer between your accounts');
+  });
+  return items;
 };
 
 // Recompute derived flags after the user picks a budget in the review.
@@ -532,7 +612,7 @@ export const buildImportTransactions = (items, state, batchId = newId()) => {
           importedAt,
           source: 'import',
           account: it.account,
-          originalDescription: it.raw,
+          originalDescription: it.raw.replace(/\d{8,}/g, (m) => `••${m.slice(-2)}`),
           ...(it.historyOnly ? { affectsBalance: false } : {})
         }
       });
@@ -556,9 +636,61 @@ export const summarise = (items) => {
 
 export const suggestAccountLabel = (parsed, filename = '') => {
   if (parsed.bank) {
-    const cardOnly = /^(Amex|Capital One|MBNA|Triangle|Rogers Bank)$/.test(parsed.bank);
+    const cardOnly = /^(Amex|Capital One|MBNA|Triangle|Rogers Bank)$|Mastercard|Visa/.test(parsed.bank);
     return parsed.isCard && !cardOnly ? `${parsed.bank} card` : parsed.bank;
   }
   const stem = filename.replace(/\.[a-z0-9]+$/i, '').replace(/[_-]+/g, ' ').trim();
   return stem && stem.length <= 24 && !/^\d+$/.test(stem) ? stem : 'Card';
+};
+
+// Budgets worth creating for spending the import found but couldn't place.
+const BUDGET_TEMPLATES = {
+  dining: { name: 'Eating out', icon: 'utensils', color: 'orange', frequency: 'weekly' },
+  coffee: { name: 'Coffee', icon: 'coffee', color: 'amber', frequency: 'weekly' },
+  transport: { name: 'Transport', icon: 'bus', color: 'sky', frequency: 'weekly' },
+  grocery: { name: 'Grocery', icon: 'apple', color: 'emerald', frequency: 'weekly' },
+  shopping: { name: 'Shopping', icon: 'shopping-bag', color: 'pink', frequency: 'weekly' },
+  subscriptions: { name: 'Subscriptions', icon: 'tv', color: 'indigo', frequency: 'monthly' },
+  entertainment: { name: 'Fun', icon: 'gamepad-2', color: 'violet', frequency: 'weekly' },
+  alcohol: { name: 'Drinks', icon: 'popcorn', color: 'rose', frequency: 'weekly' },
+  health: { name: 'Health', icon: 'heart', color: 'rose', frequency: 'monthly' },
+  education: { name: 'Education', icon: 'graduation-cap', color: 'teal', frequency: 'monthly' },
+  travel: { name: 'Travel', icon: 'plane', color: 'sky', frequency: 'monthly' },
+  remittance: { name: 'Family support', icon: 'gift', color: 'teal', frequency: 'monthly' },
+  fees: { name: 'Bank fees', icon: 'landmark', color: 'indigo', frequency: 'monthly' },
+  utilities: { name: 'Utilities', icon: 'zap', color: 'amber', frequency: 'monthly' },
+  phone: { name: 'Phone', icon: 'smartphone', color: 'rose', frequency: 'monthly' },
+  housing: { name: 'Rent', icon: 'home', color: 'violet', frequency: 'monthly' }
+};
+
+export const suggestBudgets = (items, categories) => {
+  const days = items.map((i) => i.date).sort();
+  if (!days.length) return [];
+  const spanDays = Math.max(7, dayDiff(days[days.length - 1], days[0]) + 1);
+  const totals = new Map();
+  items.forEach((it) => {
+    if (it.status !== 'needs' || it.direction !== 'out') return;
+    const concept = conceptForText(cleanMerchant(it.raw)) || conceptForText(it.raw);
+    if (!concept || !BUDGET_TEMPLATES[concept] || categoryForConcept(concept, categories)) return;
+    const t = totals.get(concept) || { amount: 0, count: 0 };
+    t.amount += it.amount;
+    t.count += 1;
+    totals.set(concept, t);
+  });
+  const ideas = [...totals.entries()]
+    .map(([concept, t]) => ({ concept, ...BUDGET_TEMPLATES[concept], count: t.count, amount: t.amount }))
+    .sort((a, b) => b.count - a.count);
+  // Skip ideas another suggested budget already covers (coffee -> "Eating out").
+  const accepted = [];
+  ideas.forEach((idea) => {
+    const virtual = [...categories, ...accepted.map((a) => ({ id: a.concept, name: a.name, icon: a.icon }))];
+    const covered = accepted.find((a) => a.concept !== idea.concept && categoryForConcept(idea.concept, virtual)?.id === a.concept);
+    if (covered) { covered.count += idea.count; covered.amount += idea.amount; return; }
+    if (categories.some((c) => c.name.toLowerCase() === idea.name.toLowerCase())) return;
+    accepted.push({ ...idea });
+  });
+  return accepted.map(({ amount, ...idea }) => {
+    const per = idea.frequency === 'weekly' ? amount / (spanDays / 7) : amount / Math.max(1, spanDays / 30.4);
+    return { ...idea, limit: Math.max(5, Math.ceil(per / 5) * 5) };
+  });
 };

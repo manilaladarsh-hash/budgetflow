@@ -42,3 +42,46 @@ DATA:OFXSGML
 </BANKTRANLIST></CCSTMTRS></CCSTMTTRNRS></CREDITCARDMSGSRSV1></OFX>`
 };
 
+
+// Layouts matching Neo, BMO bank, BMO Mastercard and Wealthsimple exports
+// (made-up amounts, names and numbers).
+export const MORE_SAMPLES = {
+  neo: `Transaction Date,Posted Date,Status,Description,Amount
+2026-10-06,2026-10-07,Posted,FORTINOS               HAMILTON      CAN,-7.60
+2026-09-27,2026-09-29,Posted,DD/DOORDASHPOPULARPIZZ VANCOUVER     CAN,-33.22
+2026-09-27,,Declined,DD/DOORDASHPOPULARPIZZ VANCOUVER     CAN,-33.22
+2026-09-24,2026-09-24,Posted,Payment Received - Thank you,100.00
+2026-09-20,2026-09-20,Posted,Reward Cashed Out,3.20
+2026-09-16,2026-09-17,Posted,UBER CANADA/UBEREATS   TORONTO       CAN,-39.54`,
+  bmoBank: `Following data is valid as of 20261101224334 (Year/Month/Day/Hour/Minute/Second)
+
+
+First Bank Card,Transaction Type,Date Posted, Transaction Amount,Description
+
+
+'0000000000000000',DEBIT,20260810,-700.0,[CW] TF 0000#1111-222
+'0000000000000000',CREDIT,20260831,2.31,[IN]
+
+First Bank Card,Transaction Type,Date Posted, Transaction Amount,Description
+
+
+'0000000000000000',CREDIT,20260810,700.0,[CW] TF 0000#3333-444
+'0000000000000000',DEBIT,20260810,-500.0,[CW]INTERAC ETRNSFR SENT     SAM TESTER WEALTHSIMPLE  2026221040ABCDEF
+'0000000000000000',DEBIT,20260810,-400.0,[CW] TF 0000000000000001234
+'0000000000000000',DEBIT,20260818,-63.45,[DS]BELL MOBILITY   BPY/FAC
+'0000000000000000',DEBIT,20260826,-100.0,[CW]NEO
+'0000000000000000',DEBIT,20260831,-695.0,[CW]INTERAC ETRNSFR SENT     JANE LANDLORD            20262432358KFUVJQ
+'0000000000000000',DEBIT,20260831,-4000.0,[DS]TFSA CONT       FTD/RII`,
+  bmoCard: `Following data is valid as of 20261101224230:
+
+Item #,Card #,Transaction Date,Posting Date,Transaction Amount,Description
+1,'0000000000001234',20260801,20260803,315.95,AMAZON.CA* 5N2WZ0251 VANCOUVER BC
+2,'0000000000001234',20260810,20260810,-400.0,TRSF FROM/DE ACCT/CPT 0000-XXXX-444
+3,'0000000000001234',20260815,20260817,-101.69,AMAZON* GD5WJ5YK3 VANCOUVER BC`,
+  wealthsimple: `effective_date,effective_time,settlement_date,account_id,account_type,activity_type,activity_sub_type,description,direction,symbol,name,currency,quantity,unit_price,commission,net_cash_amount
+2026-08-01,00:00:00,,TEST123CAD,Chequing,Interest,-,Interest received (executed at 2026-08-01),,,,CAD,0.14,,,0.14
+2026-08-09,04:05:59,,TEST123CAD,Chequing,MoneyMovement,E_TRFIN,Interac e-Transfer® Received,,,,CAD,500,,,500
+2026-08-12,04:20:25,,TEST123CAD,Chequing,MoneyMovement,SPEND,Spend,,,,CAD,-32.25,,,-32.25
+2026-08-12,12:57:56,,TEST123CAD,Chequing,MoneyMovement,SPEND,Spend,,,,CAD,-6.44,,,-6.44
+2026-08-20,05:29:47,,TEST123CAD,Chequing,Fee,-,Cross-border fee (executed at 2026-08-20),,,,CAD,-2.65,,,-2.65`
+};

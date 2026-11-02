@@ -9,7 +9,7 @@ import { useMoney } from './shared.jsx';
 
 const empty = { name: '', limit: '', balance: '', frequency: 'weekly', icon: 'shopping-bag', color: 'emerald' };
 
-export default function CategoryEditor({ open, category, onClose, onDeleted }) {
+export default function CategoryEditor({ open, category, onClose, onDeleted, onCreated }) {
   const { actions } = useStore();
   const { notify, ask } = useFeedback();
   const money = useMoney();
@@ -42,8 +42,9 @@ export default function CategoryEditor({ open, category, onClose, onDeleted }) {
     if (!Number.isFinite(limit) || limit < 0) return setError('Enter a budget amount.');
     if (!Number.isFinite(balance)) return setError('Enter the amount left.');
     if (isNew) {
-      actions.addCategory({ name, limit, balance, frequency: form.frequency, icon: form.icon, color: form.color });
+      const id = actions.addCategory({ name, limit, balance, frequency: form.frequency, icon: form.icon, color: form.color });
       notify(`${name} budget added`);
+      if (onCreated) { onCreated(id); return; }
     } else {
       actions.updateCategory(category.id, { name, limit, balance, frequency: form.frequency, icon: form.icon, color: form.color });
       notify(`${name} updated`);

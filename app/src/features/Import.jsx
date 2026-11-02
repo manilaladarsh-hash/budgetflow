@@ -1,12 +1,12 @@
 import { useMemo, useRef, useState } from 'react';
 import {
-  Upload, FileText, X, ChevronDown, ChevronRight, Check, CircleAlert, ArrowLeft, Sparkles, History, ShieldCheck, Wand2, Undo2, ListChecks
+  Upload, FileText, X, ChevronDown, ChevronRight, Check, CircleAlert, ArrowLeft, Sparkles, History, ShieldCheck, Wand2, Undo2, ListChecks, Plus
 } from 'lucide-react';
 import { useStore } from '../state/store.jsx';
 import { useNav } from '../state/nav.js';
 import { useFeedback } from '../ui/feedback.jsx';
 import {
-  parseStatement, buildReview, assignCategory, buildImportTransactions, summarise, suggestAccountLabel
+  parseStatement, buildReview, assignCategory, buildImportTransactions, summarise, suggestAccountLabel, suggestBudgets
 } from '../lib/importer.js';
 import { learnRule } from '../lib/merchants.js';
 import { localDayKey, dateFromDayKey, formatShortDate } from '../lib/dates.js';
@@ -15,6 +15,7 @@ import { roundMoney } from '../lib/money.js';
 import { Card, Button, Sheet, TextInput, Segmented, Toggle, Badge, EmptyState, IconButton, Chip, cx } from '../ui/primitives.jsx';
 import { tintFor } from '../ui/icons.jsx';
 import { CategoryBadge, CategoryPicker, useMoney, useSortedCategories } from './shared.jsx';
+import CategoryEditor from './CategoryEditor.jsx';
 
 const PAGE = 60;
 const SOURCE_LABEL = { rule: 'Your rule', history: 'Learned', guess: 'Suggested', bank: 'Bank category' };
@@ -83,7 +84,7 @@ export default function Import() {
   );
   const items = useMemo(() => baseItems.map((it) => {
     let next = it;
-    const choice = choices[it.key];
+    const choice = choices[it.key || `id:${it.id}`] || (!it.key && choices[`group:${it.account}|${it.merchant}`]);
     if (choice && it.status !== 'skipped' && it.kind !== 'payment') {
       next = choice.skip ? { ...next, include: false, status: 'skipped', reason: 'Skipped by you' } : assignCategory(next, choice.categoryId, state);
     }
@@ -99,6 +100,8 @@ export default function Import() {
     skipped: items.filter((i) => !i.include && i.status === 'skipped')
   };
   const visible = groups[tab] || [];
+  const budgetIdeas = useMemo(() => suggestBudgets(items, state.categories), [items, state.categories]);
+  const hasETransfers = items.some((i) => /^E-Transfer (to|from) /.test(i.merchant));
 
   const toggle = (item) => {
     if (!item.categoryId) { setChooser(item); return; }
@@ -112,7 +115,7 @@ export default function Import() {
     let rules = state.importRules;
     let learned = 0;
     Object.entries(choices).forEach(([key, c]) => {
-      if (!c.always) return;
+      if (!c.always || key.startsWith('id:') || key.startsWith('group:')) return;
       rules = learnRule(rules, { key, categoryId: c.skip ? null : c.categoryId, action: c.skip ? 'skip' : 'categorize' });
       learned += 1;
     });
@@ -214,6 +217,9 @@ export default function Import() {
 
       {usable.length > 0 && (
         <>
+          {!state.prefs.name && hasETransfers && <NamePrompt />}
+          {budgetIdeas.length > 0 && <BudgetIdeas ideas={budgetIdeas} />}
+
           <div className="grid grid-cols-4 gap-1.5 p-1 rounded-2xl bg-surface-2 border border-line" role="tablist" aria-label="Review groups">
             {[['ready', 'Adding', groups.ready.length], ['needs', 'Need budget', groups.needs.length], ['deposit', 'Deposits', groups.deposit.length], ['skipped', 'Skipped', groups.skipped.length]].map(([id, label, n]) => (
               <button
@@ -260,13 +266,14 @@ export default function Import() {
 
       <CategoryChooser
         item={chooser}
-        count={chooser ? items.filter((i) => i.key === chooser.key && i.status !== 'skipped').length : 0}
+        count={chooser ? items.filter((i) => i.status !== 'skipped' && (chooser.key ? i.key === chooser.key : !i.key && i.account === chooser.account && i.merchant === chooser.merchant)).length : 0}
         onClose={() => setChooser(null)}
-        onPick={({ categoryId, always, skip }) => {
-          setChoices((c) => ({ ...c, [chooser.key]: { categoryId, always, skip } }));
+        onPick={({ categoryId, always, skip, applyAll }) => {
+          const choiceKey = chooser.key || (applyAll ? `group:${chooser.account}|${chooser.merchant}` : `id:${chooser.id}`);
+          setChoices((c) => ({ ...c, [choiceKey]: { categoryId, always: always && !!chooser.key, skip } }));
           setOverrides((o) => {
             const next = { ...o };
-            items.filter((i) => i.key === chooser.key).forEach((i) => { delete next[i.id]; });
+            items.filter((i) => (i.key || `id:${i.id}`) === choiceKey || (!i.key && choiceKey === `group:${i.account}|${i.merchant}`)).forEach((i) => { delete next[i.id]; });
             if (chooser.status === 'skipped' && !skip) next[chooser.id] = { ...assignCategory({ ...chooser, status: 'ready' }, categoryId, state), reason: '' };
             return next;
           });
@@ -274,6 +281,55 @@ export default function Import() {
         }}
       />
     </div>
+  );
+}
+
+function NamePrompt() {
+  const { actions } = useStore();
+  const [name, setName] = useState('');
+  return (
+    <Card className="p-4">
+      <p className="font-medium">What's your name?</p>
+      <p className="text-sm text-muted mt-0.5">E-transfers to and from yourself (between your own banks) are then skipped instead of counted as spending.</p>
+      <div className="flex gap-2 mt-3">
+        <TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="First and last name" aria-label="Your name" />
+        <Button variant="secondary" onClick={() => name.trim() && actions.setPrefs({ name: name.trim() })} disabled={!name.trim()}>Save</Button>
+      </div>
+    </Card>
+  );
+}
+
+function BudgetIdeas({ ideas }) {
+  const { actions } = useStore();
+  const { notify } = useFeedback();
+  const money = useMoney();
+  const [picked, setPicked] = useState(() => new Set(ideas.map((i) => i.concept)));
+  const toggle = (c) => setPicked((p) => { const n = new Set(p); if (n.has(c)) n.delete(c); else n.add(c); return n; });
+  const create = () => {
+    const chosen = ideas.filter((i) => picked.has(i.concept));
+    chosen.forEach((i) => actions.addCategory({ name: i.name, limit: i.limit, balance: i.limit, frequency: i.frequency, icon: i.icon, color: i.color }));
+    notify(`Added ${chosen.length} budget${chosen.length === 1 ? '' : 's'} — entries sorted`);
+  };
+  const total = ideas.reduce((s, i) => s + i.count, 0);
+  return (
+    <Card className="p-4">
+      <p className="font-medium">Add budgets for {total} unsorted entries?</p>
+      <p className="text-sm text-muted mt-0.5">Amounts are based on what you spent in these statements. You can change them later.</p>
+      <div className="mt-3 divide-y divide-[var(--border)]">
+        {ideas.map((i) => (
+          <label key={i.concept} className="flex items-center gap-3 py-2.5 cursor-pointer">
+            <input type="checkbox" checked={picked.has(i.concept)} onChange={() => toggle(i.concept)} className="w-5 h-5 accent-[var(--accent)]" />
+            <CategoryBadge category={{ icon: i.icon, color: i.color, name: i.name }} size={32} iconSize={16} />
+            <span className="flex-1 min-w-0">
+              <span className="block text-[15px] font-medium">{i.name}</span>
+              <span className="block text-xs text-muted">{i.count} {i.count === 1 ? 'entry' : 'entries'}</span>
+            </span>
+            <span className="text-sm text-muted tabular">{money(i.limit)}/{i.frequency === 'weekly' ? 'wk' : 'mo'}</span>
+          </label>
+        ))}
+      </div>
+      <Button className="w-full mt-3" onClick={create} disabled={!picked.size}>Add {picked.size} budget{picked.size === 1 ? '' : 's'}</Button>
+    </Card>
   );
 }
 
@@ -353,7 +409,7 @@ function FileCard({ file, onChange, onRemove }) {
         <span className="w-10 h-10 rounded-2xl bg-surface-2 text-muted flex items-center justify-center shrink-0"><FileText size={18} /></span>
         <div className="flex-1 min-w-0">
           <p className="font-medium truncate">{file.name}</p>
-          <p className="text-xs text-muted mt-0.5">{p.bank ? `${p.bank} · ` : ''}{p.format} · {p.rows.length} entries{dateLabel ? ` · ${dateLabel}` : ''}</p>
+          <p className="text-xs text-muted mt-0.5">{p.bank ? `${p.bank} · ` : ''}{p.format} · {p.rows.length} entries{dateLabel ? ` · ${dateLabel}` : ''}{p.declined ? ` · ${p.declined} declined left out` : ''}</p>
         </div>
         <IconButton label={`Remove ${file.name}`} size={36} onClick={onRemove}><X size={18} /></IconButton>
       </div>
@@ -390,26 +446,53 @@ function CategoryChooser({ item, count, onClose, onPick }) {
   const categories = useSortedCategories();
   const money = useMoney();
   const [always, setAlways] = useState(true);
+  const [applyAll, setApplyAll] = useState(true);
+  const [creating, setCreating] = useState(false);
   if (!item) return null;
   const isIncome = item.direction === 'in';
+  const learnable = !!item.key;
+  const remember = always && learnable;
   return (
-    <Sheet open onClose={onClose} title={item.merchant || 'Choose a budget'}>
-      <p className="text-sm text-muted -mt-1 mb-4">{isIncome ? '+' : '−'}{money(item.amount).replace('−', '')} · {item.raw}</p>
-      <CategoryPicker categories={categories} value={item.categoryId} onChange={(categoryId) => onPick({ categoryId, always })} showBalance={false} />
-      <div className="mt-5 space-y-3">
-        <Toggle
-          checked={always}
-          onChange={setAlways}
-          label={`Always use this for ${item.merchant}`}
-          description={count > 1 ? `Also applies to the other ${count - 1} ${item.merchant} entries in this import.` : 'Future imports and Apple Pay entries sort automatically.'}
-        />
-        {!isIncome && (
-          <Button variant="secondary" className="w-full" onClick={() => onPick({ categoryId: null, always, skip: true })}>
-            {always ? `Always skip ${item.merchant}` : 'Skip this one'}
-          </Button>
-        )}
-      </div>
-    </Sheet>
+    <>
+      <Sheet open={!creating} onClose={onClose} title={item.merchant || 'Choose a budget'}>
+        <p className="text-sm text-muted -mt-1 mb-4">{isIncome ? '+' : '−'}{money(item.amount).replace('−', '')} · {formatShortDate(dateFromDayKey(item.date))} · {item.account}</p>
+        <CategoryPicker categories={categories} value={item.categoryId} onChange={(categoryId) => onPick({ categoryId, always: remember, applyAll })} showBalance={false} />
+        <Button variant="ghost" size="sm" className="mt-3" onClick={() => setCreating(true)}><Plus size={16} /> New budget</Button>
+        <div className="mt-4 space-y-3">
+          {learnable ? (
+            <Toggle
+              checked={always}
+              onChange={setAlways}
+              label={`Always use this for ${item.merchant}`}
+              description={count > 1 ? `Also applies to the other ${count - 1} ${item.merchant} entries in this import.` : 'Future imports and Apple Pay entries sort automatically.'}
+            />
+          ) : (
+            <>
+              {count > 1 && (
+                <Toggle
+                  checked={applyAll}
+                  onChange={setApplyAll}
+                  label={`Use for all ${count} “${item.merchant}” entries from ${item.account}`}
+                  description="Your bank doesn't say where these were spent, so this applies to this import only."
+                />
+              )}
+              {count <= 1 && <p className="text-xs text-subtle">Your bank doesn't say where this was spent, so it can't be remembered for next time.</p>}
+            </>
+          )}
+          {!isIncome && (
+            <Button variant="secondary" className="w-full" onClick={() => onPick({ categoryId: null, always: remember, skip: true, applyAll })}>
+              {remember ? `Always skip ${item.merchant}` : !learnable && applyAll && count > 1 ? `Skip all ${count}` : 'Skip this one'}
+            </Button>
+          )}
+        </div>
+      </Sheet>
+      <CategoryEditor
+        open={creating}
+        category={null}
+        onClose={() => setCreating(false)}
+        onCreated={(categoryId) => { setCreating(false); onPick({ categoryId, always: remember, applyAll }); }}
+      />
+    </>
   );
 }
 

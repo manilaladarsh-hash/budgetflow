@@ -6,7 +6,7 @@
 const PREFIXES = [
   /^(?:POS|OPOS|IDP|INTERAC|VISA DEBIT|DEBIT CARD|MASTERCARD DEBIT|CONTACTLESS|APPLE PAY|GOOGLE PAY|E-?COMMERCE)\s+(?:PURCHASE|PUR|RETAIL PURCHASE|PMT|PAYMENT)?\s*[-:#]?\s*/,
   /^(?:PURCHASE|RETAIL PURCHASE|POINT OF SALE|ACHAT|PAIEMENT DIRECT|ACHAT PAR CARTE)\s*[-:#]?\s*/,
-  /^(?:SQ|TST|SP|PY|PP|DD|PAYPAL|IZ|ZETTLE|CLV|CKE|SUMUP|HLU|HELCIM|WPY|BT)\s*\*\s*/,
+  /^(?:SQ|TST|SP|PY|PP|DD|PAYPAL|IZ|ZETTLE|CLV|CKE|SUMUP|HLU|HELCIM|WPY|BT|ZEFFY|MOL)\s*[*/]\s*/,
   /^(?:FPOS|C-IDP PURCHASE-\d+|WWW|PRE-?AUTH(?:ORIZED)?(?:\s+DEBIT)?|PAP)\s*[-:#]?\s*/
 ];
 
@@ -17,7 +17,7 @@ const CITY_PREFIX = new Set(['NORTH', 'SOUTH', 'EAST', 'WEST', 'ST', 'STE', 'SAI
 const ALIASES = [
   [/^(?:AMZN|AMAZON)\b(?!.*PRIME)/, 'Amazon'],
   [/^(?:AMZN|AMAZON).*PRIME/, 'Amazon Prime'],
-  [/^UBER\s*\*?\s*EATS|^UBEREATS/, 'Uber Eats'],
+  [/UBER\s*\*?\s*EATS|UBEREATS/, 'Uber Eats'],
   [/^UBER\b/, 'Uber'],
   [/^LYFT\b/, 'Lyft'],
   [/^APPLE\.?COM\/?BILL|^APPLE\.COM\b|^ITUNES/, 'Apple'],
@@ -35,7 +35,14 @@ const ALIASES = [
   [/^SHOPPERS\s*DRUG/, 'Shoppers Drug Mart'],
   [/^COSTCO\s*GAS/, 'Costco Gas'],
   [/^COSTCO/, 'Costco'],
-  [/^DOORDASH|^DD\s*\*?\s*DOORDASH/, 'DoorDash'],
+  [/^DOORDASH|^DD\s*[*/]?\s*DOORDASH/, 'DoorDash'],
+  [/^METROLINX|^GO TRANSIT/, 'GO Transit'],
+  [/^HELLOFRESH/, 'HelloFresh'],
+  [/^ALIEXPRESS/, 'AliExpress'],
+  [/^REMITLY/, 'Remitly'],
+  [/GST\/TPS|GST CREDIT|GST\/HST/, 'GST/HST credit'],
+  [/^CANADA\s+PRO\b|^EFT CREDIT CANADA$/, 'Government of Canada'],
+  [/^CINEPLEX/, 'Cineplex'],
   [/^SKIP\s*THE\s*DISHES|^SKIPTHEDISHES/, 'SkipTheDishes'],
   [/^WAL-?MART|^WALMART/, 'Walmart'],
   [/^CANADIAN TIRE GAS|^CDN TIRE GAS/, 'Canadian Tire Gas'],
@@ -84,9 +91,38 @@ const titleCase = (s) => s.toLowerCase()
 const isWordish = (w) => /^[A-Z][A-Z'.-]*$/.test(w) && !w.includes('.');
 
 // Cleans a raw bank description into a readable merchant name.
+const GENERIC = { SPEND: 'Card purchase', IN: 'Interest', INTEREST: 'Interest', SC: 'Service charge' };
+
+// "INTERAC ETRNSFR SENT  JOHN SMITH  2026..." -> "E-Transfer to John Smith"
+const eTransferName = (s) => {
+  const m = s.match(/(?:INTERAC\s+)?(?:E-?\s?TRA?NS?FE?R|ETRNSFR|E-TFR)(?:®)?\s*(SENT|SEND|RECVD|RECEIVED|AD RECVD|AUTODEPOSIT|AUTO-DEPOSIT|TO:?|FROM:?|REQUEST)?\s*(.*)$/);
+  if (!m) return null;
+  const dir = /SENT|SEND|TO/.test(m[1] || '') ? 'to' : m[1] ? 'from' : '';
+  const name = (m[2] || '')
+    .replace(/\b(?=[A-Z0-9]*\d)[A-Z0-9]{10,}\b/g, ' ') // reference codes
+    .replace(/[^A-Z' .&-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const title = name ? name.toLowerCase().replace(/(^|[\s'-])([a-z])/g, (_, p, c) => p + c.toUpperCase()) : '';
+  if (!title) return dir === 'to' ? 'E-Transfer sent' : dir === 'from' ? 'E-Transfer received' : 'E-Transfer';
+  return `E-Transfer${dir ? ` ${dir}` : ''} ${title}`;
+};
+
 export const cleanMerchant = (raw) => {
-  const original = String(raw || '').toUpperCase().trim();
-  if (!original) return '';
+  const original = String(raw || '').toUpperCase().trim()
+    .replace(/^\s*\[[A-Z]{2}\]\s*/, '') // BMO codes like [CW], [DS]
+    .replace(/\s*\(EXECUTED AT [^)]*\)/, '')
+    .trim();
+  if (!original) return String(raw || '').trim() === '' ? '' : (GENERIC[String(raw).replace(/[^A-Z]/gi, '').toUpperCase()] || '');
+  if (GENERIC[original]) return GENERIC[original];
+  const collapsed = original.replace(/\s+/g, ' ');
+  if (/^TF\s+\d{12,}/.test(collapsed)) return 'Credit card payment';
+  if (/^TF\s+\d{4}#/.test(collapsed)) return 'Transfer between accounts';
+  if (/^TRSF FROM\/DE ACCT/.test(collapsed)) return 'Payment from bank account';
+  const early = ALIASES.find(([re]) => re.test(collapsed));
+  if (early && /^(?:CANADA|GST|EFT)/.test(collapsed)) return early[1];
+  const et = eTransferName(original.replace(/\s+/g, ' '));
+  if (et) return et;
   // Banks often pad the location into its own column-like segment.
   let s = original.split(/\s{2,}|\t/)[0] || original;
   for (let i = 0; i < 3; i += 1) PREFIXES.forEach((re) => { s = s.replace(re, ''); });
@@ -122,10 +158,15 @@ export const cleanMerchant = (raw) => {
 };
 
 // Stable key used for rules and duplicate checks: letters only, first words.
+// Descriptions that say nothing about the merchant can't be learned from.
+const UNLEARNABLE = new Set(['CARD PURCHASE', 'PURCHASE', 'DEBIT', 'CREDIT', 'WITHDRAWAL', 'DEPOSIT', 'PAYMENT', 'TRANSFER', 'INTEREST', 'POS', 'ATM', 'FEE', 'SERVICE CHARGE', 'E TRANSFER', 'E TRANSFER TO', 'E TRANSFER FROM', 'MISC', 'OTHER']);
+
 export const merchantKey = (raw) => {
   const cleaned = cleanMerchant(raw).toUpperCase().replace(/[^A-Z0-9& ]+/g, ' ').replace(/\s+/g, ' ').trim();
   const words = cleaned.split(' ').filter((w) => w && !/^\d+$/.test(w));
-  return words.slice(0, 3).join(' ');
+  // E-transfers: keep direction + person ("E TRANSFER TO JOHN SMITH").
+  const key = words.slice(0, words[0] === 'E' && words[1] === 'TRANSFER' ? 5 : 3).join(' ');
+  return UNLEARNABLE.has(key) ? '' : key;
 };
 
 // ---- Category guessing ----
@@ -134,7 +175,7 @@ export const merchantKey = (raw) => {
 const CONCEPTS = {
   grocery: {
     synonyms: ['grocery', 'groceries', 'supermarket', 'food'],
-    words: ['LOBLAW', 'NO FRILLS', 'METRO', 'SOBEYS', 'FOOD BASICS', 'FRESHCO', 'COSTCO', 'FARM BOY', 'T&T', 'LONGO', 'ZEHRS', 'FORTINOS', 'SUPERSTORE', 'IGA', 'MAXI', 'PROVIGO', 'SAVE ON FOODS', 'SAVE-ON', 'WHOLE FOODS', 'INSTACART', 'VALU-MART', 'YOUR INDEPENDENT', 'SAFEWAY', 'WALMART', 'GIANT TIGER', 'ADONIS', 'NATIONS FRESH', 'BULK BARN', 'GROCERY', 'SUPERMARKET', 'MARKET', 'VOILA', 'PC EXPRESS', 'FOODLAND', 'COOP', 'CO-OP', 'TRADER JOE', 'ALDI', 'KROGER']
+    words: ['HELLOFRESH', 'GOODFOOD', 'LOBLAW', 'NO FRILLS', 'METRO', 'SOBEYS', 'FOOD BASICS', 'FRESHCO', 'COSTCO', 'FARM BOY', 'T&T', 'LONGO', 'ZEHRS', 'FORTINOS', 'SUPERSTORE', 'IGA', 'MAXI', 'PROVIGO', 'SAVE ON FOODS', 'SAVE-ON', 'WHOLE FOODS', 'INSTACART', 'VALU-MART', 'YOUR INDEPENDENT', 'SAFEWAY', 'WALMART', 'GIANT TIGER', 'ADONIS', 'NATIONS FRESH', 'BULK BARN', 'GROCERY', 'SUPERMARKET', 'MARKET', 'VOILA', 'PC EXPRESS', 'FOODLAND', 'COOP', 'CO-OP', 'TRADER JOE', 'ALDI', 'KROGER']
   },
   coffee: {
     synonyms: ['coffee', 'cafe', 'café', 'eating out', 'dining', 'food'],
@@ -154,11 +195,11 @@ const CONCEPTS = {
   },
   subscriptions: {
     synonyms: ['subscriptions', 'subscription', 'streaming', 'entertainment', 'fun', 'shopping'],
-    words: ['NETFLIX', 'SPOTIFY', 'DISNEY', 'CRAVE', 'PRIME VIDEO', 'AMAZON PRIME', 'YOUTUBE', 'APPLE.COM', 'APPLE COM BILL', 'ITUNES', 'GOOGLE STORAGE', 'GOOGLE ONE', 'GOOGLE PLAY', 'MICROSOFT', 'XBOX', 'PLAYSTATION', 'STEAM', 'NINTENDO', 'AUDIBLE', 'PATREON', 'OPENAI', 'CHATGPT', 'ANTHROPIC', 'CLAUDE.AI', 'DROPBOX', 'ADOBE', 'PARAMOUNT', 'APPLE TV', 'TWITCH', 'NOTION', 'ICLOUD']
+    words: ['GOOGLE', 'NETFLIX', 'SPOTIFY', 'DISNEY', 'CRAVE', 'PRIME VIDEO', 'AMAZON PRIME', 'YOUTUBE', 'APPLE.COM', 'APPLE COM BILL', 'ITUNES', 'GOOGLE STORAGE', 'GOOGLE ONE', 'GOOGLE PLAY', 'MICROSOFT', 'XBOX', 'PLAYSTATION', 'STEAM', 'NINTENDO', 'AUDIBLE', 'PATREON', 'OPENAI', 'CHATGPT', 'ANTHROPIC', 'CLAUDE.AI', 'DROPBOX', 'ADOBE', 'PARAMOUNT', 'APPLE TV', 'TWITCH', 'NOTION', 'ICLOUD']
   },
   shopping: {
     synonyms: ['shopping', 'clothes', 'clothing', 'personal', 'misc', 'household', 'stuff'],
-    words: ['AMAZON', 'AMZN', 'BEST BUY', 'WINNERS', 'MARSHALLS', 'HOMESENSE', 'H&M', 'UNIQLO', 'ZARA', 'IKEA', 'CANADIAN TIRE', 'DOLLARAMA', 'DOLLAR TREE', 'HOME DEPOT', 'RONA', 'LOWE', 'STAPLES', 'INDIGO', 'CHAPTERS', 'SPORT CHEK', 'SPORTCHEK', 'MEC ', 'ROOTS', 'GAP ', 'OLD NAVY', 'SEPHORA', 'LULULEMON', 'ARITZIA', 'SIMONS', 'HUDSON', 'HBC', 'SHEIN', 'TEMU', 'ALIEXPRESS', 'ETSY', 'EBAY', 'APPLE STORE', 'MICHAELS', 'MARK\'S', 'NIKE', 'ADIDAS', 'TOYS', 'PET VALU', 'PETSMART', 'STRUCTUBE']
+    words: ['STYLEVANA', 'FRAGRANCENET', 'YESSTYLE', 'GOLF TOWN', 'AMAZON', 'AMZN', 'BEST BUY', 'WINNERS', 'MARSHALLS', 'HOMESENSE', 'H&M', 'UNIQLO', 'ZARA', 'IKEA', 'CANADIAN TIRE', 'DOLLARAMA', 'DOLLAR TREE', 'HOME DEPOT', 'RONA', 'LOWE', 'STAPLES', 'INDIGO', 'CHAPTERS', 'SPORT CHEK', 'SPORTCHEK', 'MEC ', 'ROOTS', 'GAP ', 'OLD NAVY', 'SEPHORA', 'LULULEMON', 'ARITZIA', 'SIMONS', 'HUDSON', 'HBC', 'SHEIN', 'TEMU', 'ALIEXPRESS', 'ETSY', 'EBAY', 'APPLE STORE', 'MICHAELS', 'MARK\'S', 'NIKE', 'ADIDAS', 'TOYS', 'PET VALU', 'PETSMART', 'STRUCTUBE']
   },
   health: {
     synonyms: ['health', 'pharmacy', 'medical', 'fitness', 'gym', 'wellness', 'personal care'],
@@ -174,7 +215,7 @@ const CONCEPTS = {
   },
   travel: {
     synonyms: ['travel', 'trips', 'trip', 'vacation', 'holiday'],
-    words: ['AIR CANADA', 'WESTJET', 'PORTER', 'FLAIR', 'LYNX', 'SWOOP', 'AIRBNB', 'EXPEDIA', 'BOOKING.COM', 'HOTEL', 'MARRIOTT', 'HILTON', 'HYATT', 'VIA RAIL', 'FLIXBUS', 'MEGABUS', 'GREYHOUND', 'AIRPORT', 'DUTY FREE']
+    words: ['FLIX', 'AIR CANADA', 'WESTJET', 'PORTER', 'FLAIR', 'LYNX', 'SWOOP', 'AIRBNB', 'EXPEDIA', 'BOOKING.COM', 'HOTEL', 'MARRIOTT', 'HILTON', 'HYATT', 'VIA RAIL', 'FLIXBUS', 'MEGABUS', 'GREYHOUND', 'AIRPORT', 'DUTY FREE']
   },
   alcohol: {
     synonyms: ['alcohol', 'drinks', 'fun', 'entertainment'],
@@ -182,11 +223,19 @@ const CONCEPTS = {
   },
   entertainment: {
     synonyms: ['entertainment', 'fun', 'leisure', 'hobbies'],
-    words: ['CINEPLEX', 'LANDMARK CINEMA', 'TICKETMASTER', 'EVENTBRITE', 'BOWLING', 'MUSEUM', 'THEATRE', 'THEATER', 'CONCERT', 'GAMES']
+    words: ['TICKET', 'RESIDENT ADVISOR', 'CINEPLEX', 'LANDMARK CINEMA', 'TICKETMASTER', 'EVENTBRITE', 'BOWLING', 'MUSEUM', 'THEATRE', 'THEATER', 'CONCERT', 'GAMES']
   },
   education: {
     synonyms: ['education', 'school', 'tuition', 'books', 'learning'],
-    words: ['UNIVERSITY', 'COLLEGE', 'TUITION', 'COURSERA', 'UDEMY', 'BOOKSTORE']
+    words: ['MCMASTER ACCT', 'UNIVERSITY', 'COLLEGE', 'TUITION', 'COURSERA', 'UDEMY', 'BOOKSTORE']
+  },
+  fees: {
+    synonyms: ['fees', 'bank', 'bills', 'misc'],
+    words: ['CROSS-BORDER FEE', 'SERVICE CHARGE', 'ANNUAL FEE', 'NSF', 'OVERDRAFT', 'ATM FEE', 'MONTHLY FEE', 'INTEREST CHARGE', 'FOREIGN TRANSACTION FEE']
+  },
+  remittance: {
+    synonyms: ['family', 'remittance', 'support', 'sent abroad', 'transfers'],
+    words: ['REMITLY', 'WISE', 'WESTERN UNION', 'MONEYGRAM', 'INTERNATIONAL TRANSFER', 'XOOM']
   }
 };
 
@@ -297,9 +346,12 @@ export const suggestCategory = ({ description, bankCategory, categories, rules =
     if (rule.action === 'skip') return { categoryId: null, source: 'rule', skip: true, ruleId: rule.id };
     if (valid(rule.categoryId)) return { categoryId: rule.categoryId, source: 'rule', ruleId: rule.id };
   }
+  const exactBudget = bankCategory && categories.find((c) => c.name.toLowerCase() === String(bankCategory).trim().toLowerCase());
+  if (exactBudget) return { categoryId: exactBudget.id, source: 'bank' };
   const fromHistory = history?.get(key);
   if (fromHistory && valid(fromHistory)) return { categoryId: fromHistory, source: 'history' };
-  const byText = categoryForConcept(conceptForText(description), categories);
+  // The cleaned name ("Uber Eats") is a better hint than the raw descriptor.
+  const byText = categoryForConcept(conceptForText(cleanMerchant(description)) || conceptForText(description), categories);
   if (byText) return { categoryId: byText.id, source: 'guess' };
   const byBank = categoryForConcept(conceptForBankCategory(bankCategory), categories);
   if (byBank) return { categoryId: byBank.id, source: 'bank' };

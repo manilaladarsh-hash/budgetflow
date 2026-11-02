@@ -87,7 +87,7 @@ describe('statement formats', () => {
   });
   it('BMO: compact dates, positive purchases', () => {
     const p = parseStatement(SAMPLES.bmo);
-    expect(p.bank).toBe('BMO');
+    expect(p.bank).toBe('BMO Mastercard');
     expect(p.rows.map((r) => r.date)).toEqual(['2026-10-30', '2026-10-29', '2026-10-28']);
     expect(out(p)).toEqual([23.1, 8.75]);
   });
@@ -230,7 +230,7 @@ describe('helpers', () => {
   it('classifies payments and transfers', () => {
     expect(classifyDescription('PAYMENT THANK YOU/PAIEMENT MERCI')).toBe('card-payment');
     expect(classifyDescription('TD VISA PREAUTH PYMT')).toBe('card-payment');
-    expect(classifyDescription('TRSF FROM/DE ACCT/CPT 1234')).toBe(null);
+    expect(classifyDescription('TRSF FROM/DE ACCT/CPT 1234')).toBe('card-payment');
     expect(classifyDescription('INTERAC E-TRANSFER TO J SMITH')).toBe(null);
     expect(classifyDescription('WWW TRF DDA - 1234')).toBe('transfer');
   });
@@ -262,5 +262,86 @@ describe('Apple Pay quick-add links', () => {
     const items = buildReview({ files: [{ id: 'x', account: 'Visa', parsed: parseStatement('Date,Description,Amount\n' + localDayKey(new Date()) + ',STARBUCKS #123 TORONTO ON,-4.25') }], state });
     expect(items[0]).toMatchObject({ status: 'skipped' });
     expect(items[0].reason).toContain('Starbucks');
+  });
+});
+
+describe('Neo, BMO and Wealthsimple layouts', async () => {
+  const { MORE_SAMPLES } = await import('../fixtures/statements.js');
+  const { suggestBudgets, isSelfTransfer } = await import('../../app/src/lib/importer.js');
+  const fileOf = (key, name) => {
+    const parsed = parseStatement(MORE_SAMPLES[key], name);
+    return { id: key, account: suggestAccountLabel(parsed, name), parsed };
+  };
+
+  it('Neo: leaves out declined charges and skips card payments', () => {
+    const f = fileOf('neo', 'NeoWorldMastercard__2026-08-01_2026-11-01.csv');
+    expect(f.account).toBe('Neo Mastercard');
+    expect(f.parsed.declined).toBe(1);
+    expect(f.parsed.rows).toHaveLength(5);
+    expect(f.parsed.rows.find((r) => r.raw.includes('UBEREATS')).merchant).toBe('Uber Eats');
+    const items = buildReview({ files: [f], state: stateWith(), now: NOW });
+    expect(items.find((i) => i.raw.startsWith('Payment'))).toMatchObject({ status: 'skipped', reason: 'Card payment' });
+    expect(items.find((i) => i.raw.startsWith('Reward'))).toMatchObject({ status: 'deposit', include: false });
+  });
+
+  it('BMO bank: both account sections, internal transfers and card payments', () => {
+    const f = fileOf('bmoBank', 'bmochequingsaving.csv');
+    expect(f.account).toBe('BMO bank');
+    expect(f.parsed.rows).toHaveLength(9);
+    const items = buildReview({ files: [f], state: stateWith({ prefs: { name: 'Sam Tester' } }), now: NOW });
+    const by = (s) => items.find((i) => i.raw.includes(s));
+    expect(by('TF 0000#1111').reason).toBe('Transfer between your accounts');
+    expect(by('TF 0000000000000001234').reason).toBe('Card payment');
+    expect(by('[CW]NEO').reason).toBe('Card payment');
+    expect(by('TFSA').reason).toBe('Transfer between your accounts');
+    expect(by('SAM TESTER').reason).toBe('E-transfer to/from yourself');
+    expect(by('JANE LANDLORD')).toMatchObject({ merchant: 'E-Transfer to Jane Landlord', status: 'needs' });
+    expect(by('BELL')).toMatchObject({ merchant: 'Bell', direction: 'out', amount: 63.45 });
+    expect(by('[IN]')).toMatchObject({ merchant: 'Interest', status: 'deposit' });
+  });
+
+  it('BMO Mastercard: purchases positive, payments from the bank skipped', () => {
+    const f = fileOf('bmoCard', 'bmocreditaug.csv');
+    expect(f.account).toBe('BMO Mastercard');
+    const items = buildReview({ files: [f], state: stateWith(), now: NOW });
+    expect(items.find((i) => i.amount === 315.95)).toMatchObject({ direction: 'out', merchant: 'Amazon', categoryId: 's' });
+    expect(items.find((i) => i.amount === 400)).toMatchObject({ status: 'skipped', reason: 'Card payment' });
+    expect(items.find((i) => i.amount === 101.69)).toMatchObject({ direction: 'in', kind: 'refund' });
+  });
+
+  it('Wealthsimple: columns, unlearnable "Spend" rows and cross-account pairing', () => {
+    const ws = fileOf('wealthsimple', 'activities-export-2026-11-01wealthsimple.csv');
+    expect(ws.account).toBe('Wealthsimple');
+    expect(ws.parsed.rows).toHaveLength(5);
+    const spend = ws.parsed.rows.find((r) => r.amount === 32.25);
+    expect(spend).toMatchObject({ merchant: 'Card purchase', key: '', direction: 'out' });
+    // The e-transfer received pairs with the BMO e-transfer sent, even without a name set.
+    const items = buildReview({ files: [ws, fileOf('bmoBank', 'bmochequingsaving.csv')], state: stateWith(), now: NOW });
+    expect(items.find((i) => i.account === 'Wealthsimple' && i.amount === 500)).toMatchObject({ status: 'skipped', reason: 'Transfer between your accounts' });
+    expect(items.find((i) => i.raw.includes('SAM TESTER')).status).toBe('skipped');
+    expect(items.find((i) => i.raw.startsWith('Interest received')).status).toBe('deposit');
+  });
+
+  it('suggests budgets for unplaced spending, folding overlaps', () => {
+    const files = [fileOf('neo', 'neo.csv'), fileOf('wealthsimple', 'ws.csv')];
+    const state = normalizeState({ categories: [categories[0]], transactions: [], cycleStartDate: NOW.toISOString() });
+    const ideas = suggestBudgets(buildReview({ files, state, now: NOW }), state.categories);
+    expect(ideas.map((i) => i.name)).toEqual(expect.arrayContaining(['Eating out', 'Bank fees']));
+    expect(ideas.every((i) => i.limit >= 5)).toBe(true);
+  });
+
+  it('spots e-transfers to yourself by name', () => {
+    expect(isSelfTransfer('[CW]INTERAC ETRNSFR SENT SAM WEALTHSIMPLE', 'Sam')).toBe(true);
+    expect(isSelfTransfer('INTERAC E-TRANSFER SEND Sam Tester', 'Sam Tester')).toBe(true);
+    expect(isSelfTransfer('INTERAC ETRNSFR SENT JOHN SMITH', 'Sam Tester')).toBe(false);
+    expect(isSelfTransfer('SAM COFFEE', 'Sam')).toBe(false);
+  });
+
+  it('never stores long card or reference numbers', () => {
+    const f = fileOf('bmoBank', 'b.csv');
+    const items = buildReview({ files: [f], state: stateWith(), now: NOW });
+    const landlord = items.find((i) => i.raw.includes('JANE'));
+    const txs = buildImportTransactions([{ ...landlord, include: true, categoryId: 'r' }], stateWith());
+    expect(txs[0].originalDescription).not.toMatch(/\d{8,}/);
   });
 });

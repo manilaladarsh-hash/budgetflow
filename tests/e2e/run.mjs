@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { writeFileSync } from 'node:fs';
 import { legacyStorage } from './fixtures.mjs';
-import { SAMPLES } from '../fixtures/statements.js';
+import { SAMPLES, MORE_SAMPLES } from '../fixtures/statements.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const outDir = fileURLToPath(new URL('./out/', import.meta.url));
@@ -331,6 +331,40 @@ await test('import bank + card statements, learn a rule, undo, no duplicates', a
   await page.getByRole('button', { name: 'Nothing selected' }).waitFor();
   await page.getByRole('tab', { name: /Skipped/ }).click();
   expect(await page.getByText('Already imported').first().isVisible(), 'duplicates not flagged');
+  return page;
+});
+
+await test('Neo/BMO/Wealthsimple import: suggested budgets and own-name transfers', async () => {
+  const files = { 'NeoWorldMastercard.csv': MORE_SAMPLES.neo, 'bmochequingsaving.csv': MORE_SAMPLES.bmoBank, 'activities-export-wealthsimple.csv': MORE_SAMPLES.wealthsimple };
+  const paths = Object.entries(files).map(([name, text]) => { writeFileSync(`${outDir}${name}`, text); return `${outDir}${name}`; });
+  const seed = { ...legacyStorage(), user_name: '' };
+  const page = await newPage({ seed });
+  await go(page, 'import');
+  await page.getByTestId('import-input').setInputFiles(paths);
+  expect(await page.getByLabel('Card name for NeoWorldMastercard.csv').inputValue() === 'Neo Mastercard', 'Neo not detected');
+  await page.getByText('1 declined left out', { exact: false }).waitFor();
+  await page.getByLabel('Your name').fill('Sam Tester');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText(/^Add budgets for \d+ unsorted/).waitFor();
+  await page.screenshot({ path: `${outDir}import-budget-ideas.png`, fullPage: true });
+  await page.getByRole('button', { name: /^Add \d+ budgets?$/ }).click();
+  await page.waitForTimeout(300);
+  const cats = JSON.parse(await ls(page, 'cats_v33')).map((c) => c.name);
+  expect(cats.includes('Eating out'), `budgets not created: ${cats}`);
+  await page.getByRole('tab', { name: /Skipped/ }).click();
+  expect(await page.getByText('E-transfer to/from yourself').first().isVisible(), 'own e-transfer not skipped');
+  await page.getByRole('tab', { name: /Need budget/ }).click();
+  // Wealthsimple "Spend" rows: one choice for all of them.
+  await page.getByRole('button', { name: 'Choose a budget for Card purchase' }).first().click();
+  await dialog(page).getByText(/Use for all 2 “Card purchase” entries/).waitFor();
+  await dialog(page).getByRole('radio', { name: 'Shopping' }).click();
+  await page.waitForTimeout(200);
+  expect(!(await page.getByRole('button', { name: 'Choose a budget for Card purchase' }).count()), 'card purchases not all assigned');
+  await page.getByRole('button', { name: /^Add \d+ entr/ }).click();
+  await page.getByText(/^Added \d+ entries$/).waitFor();
+  const txs = JSON.parse(await ls(page, 'tx_v33')).filter((t) => t.source === 'import');
+  expect(txs.some((t) => t.description === 'Uber Eats' && t.categoryName === 'Eating out'), 'Uber Eats not sorted into new budget');
+  expect(!txs.some((t) => /declined/i.test(t.originalDescription || '')) && txs.filter((t) => t.description === 'DoorDash').length === 1, 'declined charge imported');
   return page;
 });
 
