@@ -189,7 +189,7 @@ export default function Settings() {
               <Button variant="secondary" onClick={() => { actions.setPrefs({ geminiKey: keyDraft.trim() }); notify(keyDraft.trim() ? 'Key saved' : 'Key removed'); }} disabled={keyDraft.trim() === state.prefs.geminiKey}>Save</Button>
             </div>
           </Field>
-          <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm font-medium text-accent-strong">Get a free key <ExternalLink size={14} /></a>
+          <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm font-medium text-brand">Get a free key <ExternalLink size={14} /></a>
           <div>
             <p className="text-[13px] font-medium text-muted mb-2">Model</p>
             <div className="grid gap-2" role="radiogroup" aria-label="Model">
@@ -197,7 +197,7 @@ export default function Settings() {
                 const active = state.prefs.aiModel === m.id;
                 return (
                   <button key={m.id} type="button" role="radio" aria-checked={active} onClick={() => actions.setPrefs({ aiModel: m.id })}
-                    className={cx('flex items-center justify-between h-12 px-4 rounded-2xl border text-left transition', active ? 'border-accent bg-accent-soft' : 'border-line bg-surface hover:bg-surface-2')}>
+                    className={cx('flex items-center justify-between h-12 px-4 rounded-2xl border text-left transition', active ? 'border-brand bg-brand-soft' : 'border-line bg-surface hover:bg-surface-2')}>
                     <span className="text-[15px] font-medium">{m.label}</span>
                     <span className="text-xs text-muted">{m.note}</span>
                   </button>

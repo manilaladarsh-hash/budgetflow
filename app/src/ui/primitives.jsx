@@ -4,17 +4,18 @@ import { X, LoaderCircle } from 'lucide-react';
 export const cx = (...parts) => parts.filter(Boolean).join(' ');
 
 const BUTTON_VARIANTS = {
-  primary: 'bg-accent text-accent-fg hover:brightness-105 active:brightness-95',
+  primary: 'bg-brand-grad shadow-brand hover:brightness-110 active:brightness-95',
   secondary: 'bg-surface-2 text-ink hover:bg-surface-3 border border-line',
   ghost: 'text-muted hover:text-ink hover:bg-surface-2',
   danger: 'bg-danger text-white hover:brightness-105',
   'danger-soft': 'bg-danger-soft text-danger hover:brightness-95',
-  soft: 'bg-accent-soft text-accent-strong hover:brightness-95'
+  soft: 'bg-brand-soft text-brand-strong hover:brightness-95',
+  good: 'bg-accent-soft text-accent-strong hover:brightness-95'
 };
 const BUTTON_SIZES = {
-  sm: 'h-9 px-3 text-sm rounded-xl gap-1.5',
-  md: 'h-11 px-4 text-[15px] rounded-2xl gap-2',
-  lg: 'h-13 px-5 text-base rounded-2xl gap-2'
+  sm: 'h-9 px-3.5 text-sm rounded-full gap-1.5',
+  md: 'h-11 px-5 text-[15px] rounded-full gap-2',
+  lg: 'h-14 px-6 text-base rounded-full gap-2'
 };
 
 export function Button({ variant = 'primary', size = 'md', className, loading, children, type = 'button', ...rest }) {
@@ -22,7 +23,7 @@ export function Button({ variant = 'primary', size = 'md', className, loading, c
     <button
       type={type}
       className={cx(
-        'inline-flex items-center justify-center font-semibold transition select-none disabled:opacity-45 whitespace-nowrap',
+        'press inline-flex items-center justify-center font-semibold transition select-none disabled:opacity-45 whitespace-nowrap',
         BUTTON_VARIANTS[variant], BUTTON_SIZES[size], className
       )}
       disabled={loading || rest.disabled}
@@ -51,7 +52,7 @@ export function IconButton({ label, className, children, size = 44, variant = 'g
 
 export function Card({ className, children, as: As = 'section', ...rest }) {
   return (
-    <As className={cx('bg-surface border border-line rounded-3xl shadow-card', className)} {...rest}>
+    <As className={cx('bg-surface border border-line rounded-[26px] shadow-card', className)} {...rest}>
       {children}
     </As>
   );
@@ -59,8 +60,8 @@ export function Card({ className, children, as: As = 'section', ...rest }) {
 
 export function SectionHeader({ title, action, className }) {
   return (
-    <div className={cx('flex items-center justify-between px-1 mb-2.5', className)}>
-      <h2 className="text-[13px] font-semibold uppercase tracking-wide text-subtle">{title}</h2>
+    <div className={cx('flex items-center justify-between px-1 mb-3 min-h-9', className)}>
+      <h2 className="font-display text-[19px] font-bold tracking-tight text-ink">{title}</h2>
       {action}
     </div>
   );
@@ -77,7 +78,7 @@ export function Field({ label, hint, error, children, className }) {
   );
 }
 
-const inputClass = 'w-full h-12 px-4 rounded-2xl bg-surface-2 border border-line text-ink placeholder:text-subtle outline-none focus:border-accent focus:bg-surface transition';
+const inputClass = 'w-full h-12 px-4 rounded-2xl bg-surface-2 border border-line text-ink placeholder:text-subtle outline-none focus:border-brand focus:bg-surface transition';
 
 export function TextInput({ className, ...rest }) {
   return <input className={cx(inputClass, className)} {...rest} />;
@@ -103,7 +104,7 @@ export function TextArea({ className, ...rest }) {
 
 export function Segmented({ options, value, onChange, className, size = 'md', ariaLabel }) {
   return (
-    <div role="radiogroup" aria-label={ariaLabel} className={cx('flex p-1 rounded-2xl bg-surface-2 border border-line', className)}>
+    <div role="radiogroup" aria-label={ariaLabel} className={cx('flex p-1 rounded-full bg-surface-2 border border-line', className)}>
       {options.map((o) => {
         const active = o.value === value;
         return (
@@ -114,7 +115,7 @@ export function Segmented({ options, value, onChange, className, size = 'md', ar
             aria-checked={active}
             onClick={() => onChange(o.value)}
             className={cx(
-              'flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl font-semibold transition whitespace-nowrap',
+              'flex-1 inline-flex items-center justify-center gap-1.5 rounded-full font-semibold transition whitespace-nowrap',
               size === 'sm' ? 'h-8 text-[13px] px-2' : 'h-10 text-sm px-2.5',
               active ? 'bg-surface text-ink shadow-card' : 'text-muted hover:text-ink'
             )}
@@ -129,7 +130,7 @@ export function Segmented({ options, value, onChange, className, size = 'md', ar
 }
 
 export function Chip({ active, onClick, children, className, tone = 'accent', ...rest }) {
-  const activeTone = tone === 'danger' ? 'bg-danger-soft text-danger border-transparent' : 'bg-accent-soft text-accent-strong border-transparent';
+  const activeTone = tone === 'danger' ? 'bg-danger-soft text-danger border-transparent' : 'bg-brand-soft text-brand-strong border-transparent';
   return (
     <button
       type="button"
@@ -161,7 +162,7 @@ export function Toggle({ checked, onChange, label, description }) {
         role="switch"
         aria-checked={checked}
         onClick={() => onChange(!checked)}
-        className={cx('relative w-12 h-7 rounded-full transition shrink-0', checked ? 'bg-accent' : 'bg-surface-3')}
+        className={cx('relative w-12 h-7 rounded-full transition shrink-0', checked ? 'bg-brand' : 'bg-surface-3')}
       >
         <span className={cx('absolute top-1 left-1 w-5 h-5 rounded-full bg-white shadow transition-transform', checked && 'translate-x-5')} />
       </button>
@@ -171,7 +172,7 @@ export function Toggle({ checked, onChange, label, description }) {
 
 export function ProgressBar({ value, max = 1, tone = 'accent', marker, className, height = 6 }) {
   const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
-  const color = { accent: 'var(--accent)', warn: 'var(--warn)', danger: 'var(--danger)', info: 'var(--info)' }[tone] || tone;
+  const color = { accent: 'var(--accent)', brand: 'var(--brand)', warn: 'var(--warn)', danger: 'var(--danger)', info: 'var(--info)' }[tone] || tone;
   return (
     <div className={cx('relative w-full rounded-full bg-surface-3 overflow-hidden', className)} style={{ height }}>
       <div className="h-full rounded-full transition-[width] duration-500" style={{ width: `${pct}%`, background: color }} />
@@ -185,7 +186,7 @@ export function ProgressBar({ value, max = 1, tone = 'accent', marker, className
 export function EmptyState({ icon, title, body, action }) {
   return (
     <div className="flex flex-col items-center text-center px-6 py-10">
-      {icon && <div className="w-12 h-12 rounded-2xl bg-surface-2 text-muted flex items-center justify-center mb-3">{icon}</div>}
+      {icon && <div className="w-14 h-14 rounded-[20px] bg-brand-soft text-brand flex items-center justify-center mb-3">{icon}</div>}
       <p className="font-semibold text-ink">{title}</p>
       {body && <p className="text-sm text-muted mt-1 max-w-72">{body}</p>}
       {action && <div className="mt-4">{action}</div>}
@@ -197,6 +198,8 @@ export function Badge({ tone = 'neutral', children, className }) {
   const tones = {
     neutral: 'bg-surface-2 text-muted',
     good: 'bg-accent-soft text-accent-strong',
+    brand: 'bg-brand-soft text-brand-strong',
+    hero: 'hero-chip',
     warn: 'bg-warn-soft text-warn',
     bad: 'bg-danger-soft text-danger',
     info: 'bg-info-soft text-info'
@@ -285,5 +288,37 @@ export function ListRow({ icon, iconTint, title, subtitle, trailing, onClick, cl
       </span>
       {trailing}
     </Tag>
+  );
+}
+
+// Circular progress. value/max fills clockwise from 12 o'clock.
+export function Ring({ value, max = 1, size = 56, stroke = 6, color = 'var(--accent)', track = 'var(--surface-3)', children, className, label }) {
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const pct = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0;
+  const offset = c * (1 - pct);
+  return (
+    <div className={cx('relative shrink-0', className)} style={{ width: size, height: size }} role={label ? 'img' : undefined} aria-label={label}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={track} strokeWidth={stroke} />
+        {pct > 0 && (
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke={color}
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            strokeDasharray={c}
+            strokeDashoffset={offset}
+            transform={`rotate(-90 ${size / 2} ${size / 2})`}
+            className="anim-ring"
+            style={{ '--ring-from': c }}
+          />
+        )}
+      </svg>
+      {children && <div className="absolute inset-0 flex items-center justify-center">{children}</div>}
+    </div>
   );
 }

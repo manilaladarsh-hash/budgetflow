@@ -46,12 +46,12 @@ export default function Onboarding() {
     <div className="min-h-dvh flex flex-col items-center justify-center px-5 py-10">
       <div className="w-full max-w-md">
         <div className="flex gap-1.5 justify-center mb-8" aria-hidden="true">
-          {Array.from({ length: lastStep + 1 }, (_, i) => <span key={i} className={cx('h-1.5 rounded-full transition-all', i === step ? 'w-8 bg-accent' : 'w-3 bg-surface-3')} />)}
+          {Array.from({ length: lastStep + 1 }, (_, i) => <span key={i} className={cx('h-1.5 rounded-full transition-all', i === step ? 'w-8 bg-brand' : 'w-3 bg-surface-3')} />)}
         </div>
 
         {step === 0 && (
           <div className="text-center anim-pop">
-            <div className="w-16 h-16 rounded-3xl bg-accent text-accent-fg inline-flex items-center justify-center shadow-pop"><Wallet size={30} /></div>
+            <div className="w-16 h-16 rounded-3xl bg-brand-grad shadow-brand inline-flex items-center justify-center"><Wallet size={30} /></div>
             <h1 className="text-3xl font-semibold tracking-tight mt-6">BudgetFlow</h1>
             <p className="text-muted mt-2 text-[15px]">Simple weekly budgets that refill every Sunday, with rollover, goals and bills in one place.</p>
             <div className="mt-8 text-left">

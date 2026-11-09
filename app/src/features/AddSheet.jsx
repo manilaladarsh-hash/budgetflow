@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Sparkles, Mic, Camera, Plus, X, Repeat, ArrowDown } from 'lucide-react';
+import { Sparkles, Mic, Camera, Plus, X, Repeat, ArrowDown, Upload, Wand2, History } from 'lucide-react';
+import { useNav } from '../state/nav.js';
+import { suggestCategory, historyIndex } from '../lib/merchants.js';
 import { useStore } from '../state/store.jsx';
 import { useFeedback } from '../ui/feedback.jsx';
 import { parseAmount, roundMoney } from '../lib/money.js';
@@ -30,6 +32,25 @@ export default function AddSheet({ state: open, onClose }) {
   const [aiBusy, setAiBusy] = useState(false);
   const [listening, setListening] = useState(false);
   const fileRef = useRef(null);
+  const nav = useNav();
+  const [catTouched, setCatTouched] = useState(false);
+  const [suggested, setSuggested] = useState(false);
+  const history = useMemo(() => (open ? historyIndex(state.transactions) : null), [open, state.transactions]);
+  // Recent distinct expenses, for one-tap repeat.
+  const recents = useMemo(() => {
+    if (!open) return [];
+    const seen = new Set();
+    const list = [];
+    for (const t of state.transactions) {
+      if (list.length >= 6) break;
+      if ((t.type && t.type !== 'expense') || t.isSplit || !t.description || !state.categories.some((c) => c.id === t.categoryId)) continue;
+      const key = `${t.description.toLowerCase()}|${t.categoryId}|${t.amount}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      list.push(t);
+    }
+    return list;
+  }, [open, state.transactions, state.categories]);
 
   useEffect(() => {
     if (!open) return;
@@ -50,9 +71,26 @@ export default function AddSheet({ state: open, onClose }) {
     setError('');
     setAiText('');
     setNewTag('');
+    setCatTouched(!!(open.categoryId || p.categoryId));
+    setSuggested(false);
   }, [open]);
 
   const set = (patch) => { setForm((f) => ({ ...f, ...patch })); setError(''); };
+  const pickCategory = (categoryId) => { setCatTouched(true); setSuggested(false); set({ categoryId }); };
+  const setNote = (description) => {
+    const patch = { description };
+    // Until a budget is picked by hand, guess it from the note (rules, then history).
+    if (mode === 'expense' && !catTouched && description.trim().length >= 3) {
+      const hit = suggestCategory({ description, categories: state.categories, rules: state.importRules || [], history });
+      if (hit?.categoryId && hit.categoryId !== form.categoryId) { patch.categoryId = hit.categoryId; setSuggested(true); }
+    }
+    set(patch);
+  };
+  const repeat = (t) => {
+    setCatTouched(true);
+    setSuggested(false);
+    set({ amount: String(t.amount), description: t.description, categoryId: t.categoryId, tags: t.tags || [] });
+  };
   const today = localDayKey(now);
   const yesterday = localDayKey(addDays(now, -1));
   const hasAI = !!state.prefs.geminiKey;
@@ -255,7 +293,7 @@ export default function AddSheet({ state: open, onClose }) {
               </div>
             )}
 
-            <div>
+            <div className="rounded-[24px] p-3 -mx-1" style={{ background: `color-mix(in srgb, ${mode === 'income' ? 'var(--accent)' : 'var(--brand)'} 8%, var(--surface-2))` }}>
               <MoneyInput
                 symbol={money.symbol}
                 value={form.amount ?? ''}
@@ -263,28 +301,56 @@ export default function AddSheet({ state: open, onClose }) {
                 placeholder="0.00"
                 aria-label="Amount"
                 data-autofocus
-                inputClassName="h-16 text-3xl font-semibold"
-                className="[&>span]:text-2xl"
+                inputClassName="h-[72px] num text-[40px] font-extrabold bg-transparent border-transparent focus:bg-transparent focus:border-transparent"
+                className="[&>span]:text-3xl [&>span]:font-bold [&>span]:font-display"
               />
-              <div className="flex gap-2 mt-2.5">
+              <div className="flex gap-2 mt-1">
                 {PRESETS.map((p) => (
-                  <Chip key={p} active={amountNum === p} onClick={() => set({ amount: String(p) })} className="flex-1 justify-center">{money(p)}</Chip>
+                  <Chip key={p} active={amountNum === p} onClick={() => set({ amount: String(p) })} className="flex-1 justify-center bg-surface">{money(p)}</Chip>
                 ))}
               </div>
             </div>
+
+            {mode === 'expense' && recents.length > 0 && (
+              <div>
+                <p className="text-[13px] font-medium text-muted mb-2 flex items-center gap-1.5"><History size={14} /> Repeat a recent one</p>
+                <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-5 px-5">
+                  {recents.map((t) => {
+                    const c = state.categories.find((x) => x.id === t.categoryId);
+                    const tint = tintFor(c);
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => repeat(t)}
+                        aria-label={`Repeat ${t.description}, ${money(t.amount)} in ${c?.name}`}
+                        className="press shrink-0 h-11 pl-1.5 pr-3.5 rounded-full border border-line bg-surface inline-flex items-center gap-2 text-sm font-medium"
+                      >
+                        <span className="w-8 h-8 rounded-full inline-flex items-center justify-center" style={{ background: `color-mix(in srgb, ${tint} 15%, transparent)`, color: tint }}><CatIcon name={c?.icon} size={15} /></span>
+                        <span className="max-w-32 truncate">{t.description}</span>
+                        <span className="num font-bold text-muted">{money(t.amount)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <Field label="Note">
+              <TextInput value={form.description ?? ''} onChange={(e) => setNote(e.target.value)} placeholder={mode === 'income' ? 'e.g. Paycheque' : 'e.g. Coffee'} maxLength={80} />
+            </Field>
 
             {mode === 'income' ? (
               <p className="text-sm text-muted rounded-2xl bg-surface-2 border border-line px-4 py-3">Income is recorded for your insights and savings rate. It isn't added to a budget, so it won't change what you have left to spend. To top up a budget, edit the budget or use <b className="text-ink">Move</b>.</p>
             ) : (
             <div>
-              <p className="text-[13px] font-medium text-muted mb-2">Budget</p>
-              <CategoryPicker categories={categories} value={form.categoryId} onChange={(categoryId) => set({ categoryId })} />
+              <p className="text-[13px] font-medium text-muted mb-2 flex items-center justify-between">
+                Budget
+                {suggested && <span className="inline-flex items-center gap-1 text-brand text-xs font-semibold"><Wand2 size={13} /> Picked from your note</span>}
+              </p>
+              <CategoryPicker categories={categories} value={form.categoryId} onChange={pickCategory} />
             </div>
             )}
-
-            <Field label="Note">
-              <TextInput value={form.description ?? ''} onChange={(e) => set({ description: e.target.value })} placeholder={mode === 'income' ? 'e.g. Paycheque' : 'e.g. Coffee'} maxLength={80} />
-            </Field>
 
             <div>
               <p className="text-[13px] font-medium text-muted mb-2">Date</p>
@@ -332,6 +398,18 @@ export default function AddSheet({ state: open, onClose }) {
                 </div>
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={() => { onClose(); setTimeout(() => nav.go('import'), 50); }}
+              className="press w-full flex items-center gap-3 rounded-[20px] border border-dashed border-line-strong px-4 py-3 text-left"
+            >
+              <span className="w-9 h-9 rounded-[12px] bg-brand-soft text-brand inline-flex items-center justify-center shrink-0"><Upload size={17} /></span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm font-semibold">Import a bank or card statement</span>
+                <span className="block text-xs text-muted">Add many entries at once, sorted automatically.</span>
+              </span>
+            </button>
           </>
         )}
 

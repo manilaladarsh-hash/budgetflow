@@ -67,7 +67,7 @@ export function ImportSection() {
           );
         })}
         {rules.length > 8 && (
-          <button type="button" className="w-full h-11 text-sm font-medium text-accent-strong" onClick={() => setShowAll((s) => !s)}>{showAll ? 'Show fewer' : `Show all ${rules.length}`}</button>
+          <button type="button" className="w-full h-11 text-sm font-medium text-brand" onClick={() => setShowAll((s) => !s)}>{showAll ? 'Show fewer' : `Show all ${rules.length}`}</button>
         )}
       </Card>
       {rules.length > 0 && <button type="button" onClick={clearAll} className="text-xs text-subtle underline px-1 mt-2">Forget all rules</button>}

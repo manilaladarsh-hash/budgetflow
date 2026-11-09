@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { NavContext } from './state/nav.js';
-import { House, ListOrdered, Plus, ChartPie, CalendarCheck, Settings as SettingsIcon, Cloud, CloudOff, RefreshCw } from 'lucide-react';
+import { House, ListOrdered, Plus, ChartPie, CalendarCheck, Settings as SettingsIcon, Cloud, CloudOff, RefreshCw, Timer } from 'lucide-react';
 import { StoreProvider, useStore } from './state/store.jsx';
 import { FeedbackProvider, useFeedback } from './ui/feedback.jsx';
 import { IconButton, cx } from './ui/primitives.jsx';
@@ -54,7 +54,7 @@ function useThemeSync(pref) {
     const apply = () => {
       const dark = pref === 'dark' || (pref === 'system' && mq?.matches);
       document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-      document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#0b0d10' : '#f4f5f7');
+      document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#0a0912' : '#f5f4fa');
     };
     apply();
     mq?.addEventListener?.('change', apply);
@@ -97,7 +97,7 @@ function Shell() {
       <div className="min-h-dvh lg:pl-64">
         <SideRail route={route} go={nav.go} openAdd={nav.openAdd} />
         <Header route={route} msLeft={msLeft} weeks={state.weeksTracked} nav={nav} name={state.prefs.name} now={now} />
-        <main key={route} className="anim-screen mx-auto w-full max-w-[720px] px-4 pt-2 pb-36 lg:pb-16">
+        <main key={route} className="anim-screen mx-auto w-full max-w-[760px] px-4 pt-1 pb-40 lg:pb-16">
           <Screen />
         </main>
         <BottomNav route={route} go={nav.go} openAdd={nav.openAdd} />
@@ -114,6 +114,17 @@ const greeting = (now) => {
   const h = now.getHours();
   return h < 5 ? 'Good night' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
 };
+
+export function BrandMark({ size = 36 }) {
+  return (
+    <span className="bg-brand-grad shadow-brand inline-flex items-center justify-center shrink-0 rounded-[12px]" style={{ width: size, height: size }} aria-hidden="true">
+      <svg width={size * 0.56} height={size * 0.56} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 17c3-6 6 2 9-4s4-6 7-6" />
+        <circle cx="20" cy="7" r="1.2" fill="currentColor" stroke="none" />
+      </svg>
+    </span>
+  );
+}
 
 function SyncDot() {
   const { syncStatus } = useStore();
@@ -132,30 +143,31 @@ function SyncDot() {
 function Header({ route, msLeft, weeks, nav, name, now }) {
   const title = TITLES[route];
   return (
-    <header className="sticky top-0 z-40 glass border-b border-line no-print safe-top">
-      <div className="mx-auto max-w-[720px] h-16 px-4 flex items-center gap-2">
-        <div className="flex-1 min-w-0">
-          {title ? (
-            <h1 className="text-xl font-semibold tracking-tight text-ink truncate">{title}</h1>
-          ) : (
+    <header className="sticky top-0 z-40 glass no-print safe-top lg:bg-transparent lg:backdrop-blur-none">
+      <div className="mx-auto max-w-[760px] h-[68px] px-4 flex items-center gap-2.5">
+        {title ? (
+          <h1 className="flex-1 min-w-0 font-display text-[26px] font-extrabold tracking-tight text-ink truncate">{title}</h1>
+        ) : (
+          <div className="flex-1 min-w-0 flex items-center gap-3">
+            <span className="lg:hidden"><BrandMark /></span>
             <div className="min-w-0">
-              <p className="text-[13px] text-muted leading-none">{greeting(now)}{name ? `, ${name}` : ''}</p>
-              <h1 className="text-xl font-semibold tracking-tight text-ink mt-1 leading-none">BudgetFlow</h1>
+              <p className="text-[13px] text-muted leading-none truncate">{greeting(now)}{name ? `, ${name}` : ''}</p>
+              <p className="font-display text-xl font-extrabold tracking-tight text-ink mt-1 leading-none">BudgetFlow</p>
             </div>
-          )}
-        </div>
+          </div>
+        )}
         <SyncDot />
         <button
           type="button"
           onClick={nav.openCycle}
-          className="h-9 px-3 rounded-full bg-surface-2 border border-line text-[13px] font-semibold text-muted hover:text-ink inline-flex items-center gap-1.5 tabular"
+          className="press h-9 px-3 rounded-full bg-surface border border-line shadow-card text-[13px] font-semibold text-ink inline-flex items-center gap-1.5 tabular"
           aria-label={`Cycle ${weeks}, ends in ${formatCountdown(msLeft)}. Open cycle details`}
         >
-          <span className="w-1.5 h-1.5 rounded-full bg-accent" aria-hidden="true" />
+          <Timer size={15} className="text-brand" aria-hidden="true" />
           {formatCountdown(msLeft)}
         </button>
-        <IconButton label="Settings" onClick={() => nav.go('settings')} className={cx('lg:hidden', route === 'settings' && 'text-ink bg-surface-2')}>
-          <SettingsIcon size={20} />
+        <IconButton label="Settings" onClick={() => nav.go('settings')} className={cx('lg:hidden bg-surface border border-line shadow-card', route === 'settings' && 'text-brand')} size={40}>
+          <SettingsIcon size={19} />
         </IconButton>
       </div>
     </header>
@@ -172,8 +184,8 @@ const TABS = [
 
 function BottomNav({ route, go, openAdd }) {
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-50 glass border-t border-line no-print lg:hidden" aria-label="Main">
-      <div className="mx-auto max-w-[720px] grid grid-cols-5 h-[68px] px-2 safe-bottom box-content">
+    <nav className="fixed bottom-0 inset-x-0 z-50 no-print lg:hidden px-3 pointer-events-none" aria-label="Main" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
+      <div className="pointer-events-auto mx-auto max-w-[480px] grid grid-cols-5 h-[68px] px-1.5 rounded-[26px] glass border border-line shadow-pop">
         {TABS.map((t) => {
           if (t.id === 'add') {
             return (
@@ -182,9 +194,9 @@ function BottomNav({ route, go, openAdd }) {
                   type="button"
                   onClick={() => openAdd({ type: 'expense' })}
                   aria-label="Add transaction"
-                  className="w-14 h-14 rounded-full bg-accent text-accent-fg shadow-pop inline-flex items-center justify-center active:scale-95 transition"
+                  className="press w-[58px] h-[58px] -mt-7 rounded-[22px] bg-brand-grad shadow-brand inline-flex items-center justify-center ring-4 ring-[var(--bg)]"
                 >
-                  <Plus size={26} strokeWidth={2.4} />
+                  <Plus size={28} strokeWidth={2.6} />
                 </button>
               </div>
             );
@@ -196,9 +208,11 @@ function BottomNav({ route, go, openAdd }) {
               type="button"
               onClick={() => go(t.id)}
               aria-current={active ? 'page' : undefined}
-              className={cx('flex flex-col items-center justify-center gap-1 text-[11px] font-medium transition', active ? 'text-accent-strong' : 'text-subtle hover:text-ink')}
+              className={cx('relative flex flex-col items-center justify-center gap-1 text-[11px] font-semibold transition', active ? 'text-brand' : 'text-subtle hover:text-ink')}
             >
-              <t.Icon size={22} strokeWidth={active ? 2.3 : 1.9} />
+              <span className={cx('w-12 h-8 rounded-full inline-flex items-center justify-center transition', active && 'bg-brand-soft')}>
+                <t.Icon size={21} strokeWidth={active ? 2.4 : 1.9} />
+              </span>
               {t.label}
             </button>
           );
@@ -211,13 +225,16 @@ function BottomNav({ route, go, openAdd }) {
 function SideRail({ route, go, openAdd }) {
   const items = [...TABS.filter((t) => t.id !== 'add'), { id: 'settings', label: 'Settings', Icon: SettingsIcon }];
   return (
-    <aside className="hidden lg:flex fixed inset-y-0 left-0 w-64 flex-col border-r border-line bg-surface px-4 py-6 no-print" aria-label="Main">
-      <div className="px-3 mb-8">
-        <p className="text-lg font-semibold tracking-tight">BudgetFlow</p>
-        <p className="text-xs text-subtle">Weekly budgets, calmly.</p>
+    <aside className="hidden lg:flex fixed inset-y-0 left-0 w-64 flex-col border-r border-line bg-surface/70 backdrop-blur-xl px-4 py-6 no-print" aria-label="Main">
+      <div className="px-2 mb-8 flex items-center gap-3">
+        <BrandMark size={40} />
+        <div>
+          <p className="font-display text-lg font-extrabold tracking-tight leading-none">BudgetFlow</p>
+          <p className="text-xs text-subtle mt-1">Know where it goes.</p>
+        </div>
       </div>
-      <button type="button" onClick={() => openAdd({ type: 'expense' })} className="h-11 mb-4 rounded-2xl bg-accent text-accent-fg font-semibold inline-flex items-center justify-center gap-2">
-        <Plus size={18} /> New entry
+      <button type="button" onClick={() => openAdd({ type: 'expense' })} className="press h-12 mb-5 rounded-full bg-brand-grad shadow-brand font-semibold inline-flex items-center justify-center gap-2">
+        <Plus size={19} strokeWidth={2.5} /> New entry
       </button>
       <nav className="flex flex-col gap-1">
         {items.map((t) => {
@@ -228,7 +245,7 @@ function SideRail({ route, go, openAdd }) {
               type="button"
               onClick={() => go(t.id)}
               aria-current={active ? 'page' : undefined}
-              className={cx('h-11 px-3 rounded-xl inline-flex items-center gap-3 text-[15px] font-medium transition', active ? 'bg-accent-soft text-accent-strong' : 'text-muted hover:text-ink hover:bg-surface-2')}
+              className={cx('h-11 px-3 rounded-2xl inline-flex items-center gap-3 text-[15px] font-semibold transition', active ? 'bg-brand-soft text-brand-strong' : 'text-muted hover:text-ink hover:bg-surface-2')}
             >
               <t.Icon size={20} /> {t.label}
             </button>

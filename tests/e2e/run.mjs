@@ -161,6 +161,53 @@ await test('add expense, undo, backdated income and quick spend', async () => {
   return page;
 });
 
+await test('faster adding: budget picked from the note, repeat a recent entry', async () => {
+  const page = await newPage({ seed: legacyStorage() });
+  await go(page, 'home');
+  await page.getByRole('button', { name: 'Add transaction' }).click();
+  let d = dialog(page);
+  await d.getByLabel('Amount', { exact: true }).fill('7');
+  await d.getByPlaceholder('e.g. Coffee').fill('Coffee beans');
+  await d.getByText('Picked from your note').waitFor();
+  expect(await d.getByRole('radio', { name: /^Coffee/ }).getAttribute('aria-checked') === 'true', 'budget not suggested from note');
+  await d.getByRole('button', { name: /^Add expense/ }).click();
+  await page.waitForTimeout(200);
+  expect(await balance(page, 'Coffee') === -11, `suggested expense not saved (${await balance(page, 'Coffee')})`);
+  await page.getByRole('button', { name: 'Add transaction' }).click();
+  d = dialog(page);
+  await d.getByRole('button', { name: /^Repeat Groceries/ }).click();
+  expect(await d.getByLabel('Amount', { exact: true }).inputValue() === '38.5', 'repeat did not fill amount');
+  await d.getByRole('button', { name: /^Add expense/ }).click();
+  await page.waitForTimeout(200);
+  expect(await balance(page, 'Grocery') === -7, `repeat not saved (${await balance(page, 'Grocery')})`);
+  return page;
+});
+
+await test('insights: money in/out and drill into a merchant', async () => {
+  const page = await newPage({ seed: legacyStorage() });
+  await go(page, 'insights');
+  await page.getByText('Money out').first().waitFor();
+  await page.getByRole('radio', { name: 'Merchants' }).click();
+  // Today's entry, so it is always in the current month.
+  await page.getByRole('button', { name: /^Coffee beans: .*Show entries/ }).click();
+  await dialog(page).getByText('1 entry', { exact: false }).waitFor();
+  await dialog(page).getByRole('button', { name: /Coffee beans/ }).click();
+  await dialog(page).getByRole('button', { name: 'Save changes' }).waitFor();
+  return page;
+});
+
+await test('home quick actions open import and move', async () => {
+  const page = await newPage({ seed: legacyStorage() });
+  await go(page, 'home');
+  await page.getByRole('region', { name: 'Quick actions' }).getByRole('button', { name: 'Move' }).click();
+  expect(await dialog(page).getByRole('radio', { name: 'Move', exact: true }).getAttribute('aria-checked') === 'true', 'move not preselected');
+  await dialog(page).getByRole('button', { name: 'Close' }).click();
+  await page.getByRole('region', { name: 'Quick actions' }).getByRole('button', { name: 'Import' }).click();
+  await page.getByTestId('import-input').waitFor({ state: 'attached' });
+  expect(page.url().endsWith('#/import'), 'import not opened');
+  return page;
+});
+
 await test('edit, delete and restore an entry from Activity', async () => {
   const page = await newPage({ seed: legacyStorage() });
   await go(page, 'activity');
@@ -322,8 +369,10 @@ await test('import bank + card statements, learn a rule, undo, no duplicates', a
   expect(imported.find((t) => t.description === 'PRESTO')?.categoryName === 'Shopping', 'chosen budget not used');
   expect(imported.find((t) => t.description === 'Netflix')?.account === 'Amex', 'card label missing');
   expect(JSON.parse(await ls(page, 'import_rules_v1')).some((r) => r.match === 'PRESTO'), 'rule not learned');
-  // Only the Nov 1 Tim Hortons is inside the current cycle; October ones are history.
-  expect(await balance(page, 'Coffee') === -8.25, `coffee balance ${await balance(page, 'Coffee')}`);
+  // Only entries inside the current cycle change the balance; older ones are history.
+  const coffeeLive = imported.filter((t) => t.categoryName === 'Coffee' && t.affectsBalance !== false).reduce((s, t) => s + (t.type === 'income' ? -t.amount : t.amount), 0);
+  expect(imported.some((t) => t.affectsBalance === false), 'older entries should be history-only');
+  expect(Math.abs(await balance(page, 'Coffee') - (-4 - coffeeLive)) < 0.001, `coffee balance ${await balance(page, 'Coffee')} (live ${coffeeLive})`);
   await page.getByRole('button', { name: 'Undo import' }).click();
   await page.waitForTimeout(200);
   expect(JSON.parse(await ls(page, 'tx_v33')).every((t) => t.source !== 'import'), 'undo left imported entries');

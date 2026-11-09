@@ -75,7 +75,7 @@ export default function Activity() {
             onChange={(e) => { setQuery(e.target.value); setLimit(PAGE); }}
             placeholder="Search notes, budgets, tags"
             aria-label="Search activity"
-            className="w-full h-11 pl-10 pr-10 rounded-2xl bg-surface border border-line outline-none focus:border-accent text-ink placeholder:text-subtle"
+            className="w-full h-11 pl-10 pr-10 rounded-2xl bg-surface border border-line outline-none focus:border-brand text-ink placeholder:text-subtle"
           />
           {query && (
             <button type="button" aria-label="Clear search" onClick={() => setQuery('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full inline-flex items-center justify-center text-subtle hover:text-ink"><X size={16} /></button>
@@ -83,7 +83,7 @@ export default function Activity() {
         </div>
         <IconButton label="Filters" variant="secondary" onClick={() => setFilterOpen(true)} className="rounded-2xl relative">
           <SlidersHorizontal size={18} />
-          {activeCount > 0 && <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-accent text-accent-fg text-[11px] font-semibold inline-flex items-center justify-center">{activeCount}</span>}
+          {activeCount > 0 && <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-brand text-brand-fg text-[11px] font-semibold inline-flex items-center justify-center">{activeCount}</span>}
         </IconButton>
         <IconButton label="Import statements" variant="secondary" onClick={() => nav.go('import')} className="rounded-2xl"><Upload size={18} /></IconButton>
         <IconButton label="Export as CSV" variant="secondary" onClick={exportCsv} className="rounded-2xl hidden sm:inline-flex"><Download size={18} /></IconButton>
@@ -157,7 +157,7 @@ function FilterSheet({ open, onClose, filters, setFilters, categories, tags, acc
         <div>
           <div className="flex items-center justify-between mb-2">
             <p className="text-[13px] font-medium text-muted">Budget</p>
-            {filters.categoryId && <button type="button" className="text-sm text-accent-strong h-8 px-2" onClick={() => set({ categoryId: '' })}>Any budget</button>}
+            {filters.categoryId && <button type="button" className="text-sm text-brand h-8 px-2" onClick={() => set({ categoryId: '' })}>Any budget</button>}
           </div>
           <CategoryPicker categories={categories} value={filters.categoryId} onChange={(categoryId) => set({ categoryId: categoryId === filters.categoryId ? '' : categoryId })} showBalance={false} />
         </div>

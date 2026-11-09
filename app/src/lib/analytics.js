@@ -280,3 +280,67 @@ export const goalPlan = (goal, now = new Date()) => {
   const weeksLeft = Math.max(0, (end - now) / (7 * 86400000));
   return { remaining, weeksLeft, perWeek: weeksLeft > 0 ? remaining / Math.max(1, weeksLeft) : remaining };
 };
+
+// ---- Money story (Insights) ----
+
+const inMonth = (t, month) => sameMonth(t.date, month);
+
+// Money in vs out for a month. "Income" is budget-free income; refunds are
+// money back into a budget and reduce what was spent there.
+export const cashFlow = (txs, month) => {
+  let income = 0;
+  let refunds = 0;
+  let spent = 0;
+  let count = 0;
+  txs.forEach((t) => {
+    if (!inMonth(t, month)) return;
+    if (isSpending(t)) { spent += amountOf(t); count += 1; }
+    else if (isIncome(t)) {
+      if (t.categoryId === 'income') income += amountOf(t);
+      else refunds += amountOf(t);
+    }
+  });
+  const net = income + refunds - spent;
+  return {
+    income: roundMoney(income),
+    refunds: roundMoney(refunds),
+    spent: roundMoney(spent),
+    net: roundMoney(net),
+    count,
+    savingsRate: income > 0 ? (net / income) * 100 : null
+  };
+};
+
+const groupSpending = (txs, month, keyOf, labelOf) => {
+  const groups = new Map();
+  txs.forEach((t) => {
+    if (!isSpending(t) || !inMonth(t, month)) return;
+    const key = keyOf(t);
+    if (!key) return;
+    const g = groups.get(key) || { key, name: labelOf(t), amount: 0, count: 0, categoryId: t.categoryId };
+    g.amount += amountOf(t);
+    g.count += 1;
+    groups.set(key, g);
+  });
+  const list = [...groups.values()];
+  const total = list.reduce((s, g) => s + g.amount, 0);
+  return list
+    .map((g) => ({ ...g, amount: roundMoney(g.amount), percentage: total > 0 ? (g.amount / total) * 100 : 0 }))
+    .sort((a, b) => b.amount - a.amount);
+};
+
+const merchantKeyOf = (t) => String(t.description || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+// Where the money went, by merchant (the entry's note / cleaned merchant name).
+export const merchantSpending = (txs, month, limit = 8) =>
+  groupSpending(txs, month, (t) => merchantKeyOf(t) || null, (t) => String(t.description || '').trim()).slice(0, limit);
+
+// Where the money went, by card or account (imported and Apple Pay entries).
+export const accountSpending = (txs, month) =>
+  groupSpending(txs, month, (t) => t.account || 'Not set', (t) => t.account || 'Not set');
+
+// The spending entries behind one slice, newest first.
+export const spendingEntries = (txs, month, match) =>
+  txs.filter((t) => isSpending(t) && inMonth(t, month) && match(t)).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+export const merchantMatcher = (key) => (t) => merchantKeyOf(t) === key;

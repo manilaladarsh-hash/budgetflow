@@ -194,13 +194,13 @@ export default function Import() {
 
       {/* File picker */}
       <Card
-        className={cx('p-5 border-dashed border-2 transition', dragging ? 'border-accent bg-accent-soft' : 'border-line-strong')}
+        className={cx('p-5 border-dashed border-2 transition', dragging ? 'border-brand bg-brand-soft' : 'border-line-strong')}
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
         onDrop={(e) => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files); }}
       >
         <div className="flex items-center gap-4">
-          <span className="w-12 h-12 rounded-2xl bg-accent-soft text-accent-strong flex items-center justify-center shrink-0"><Upload size={22} /></span>
+          <span className="w-12 h-12 rounded-2xl bg-brand-grad shadow-brand flex items-center justify-center shrink-0"><Upload size={22} /></span>
           <div className="flex-1 min-w-0">
             <p className="font-semibold">{files.length ? 'Add more statements' : 'Import bank & card statements'}</p>
             <p className="text-sm text-muted">CSV, OFX, QFX or QBO from any bank. You can pick several files at once.</p>
@@ -327,7 +327,7 @@ function PasteCode({ onDone }) {
         <div className="mt-2 space-y-3">
           <p className="text-sm text-muted">Paste the whole link or code. Entries already in BudgetFlow are skipped.</p>
           <textarea value={code} onChange={(e) => setCode(e.target.value)} rows={4} aria-label="Import code" placeholder="https://…#/import?pack=…"
-            className="w-full px-4 py-3 rounded-2xl bg-surface-2 border border-line text-ink text-sm font-mono outline-none focus:border-accent resize-none" />
+            className="w-full px-4 py-3 rounded-2xl bg-surface-2 border border-line text-ink text-sm font-mono outline-none focus:border-brand resize-none" />
           <Button className="w-full" onClick={run} loading={busy} disabled={!code.trim()}>Import</Button>
         </div>
       )}
@@ -369,7 +369,7 @@ function BudgetIdeas({ ideas }) {
       <div className="mt-3 divide-y divide-[var(--border)]">
         {ideas.map((i) => (
           <label key={i.concept} className="flex items-center gap-3 py-2.5 cursor-pointer">
-            <input type="checkbox" checked={picked.has(i.concept)} onChange={() => toggle(i.concept)} className="w-5 h-5 accent-[var(--accent)]" />
+            <input type="checkbox" checked={picked.has(i.concept)} onChange={() => toggle(i.concept)} className="w-5 h-5 accent-[var(--brand)]" />
             <CategoryBadge category={{ icon: i.icon, color: i.color, name: i.name }} size={32} iconSize={16} />
             <span className="flex-1 min-w-0">
               <span className="block text-[15px] font-medium">{i.name}</span>
@@ -397,7 +397,7 @@ function ReviewRow({ item, onToggle, onChoose, showAccount }) {
         role="checkbox"
         aria-checked={item.include}
         aria-label={`${item.include ? 'Leave out' : 'Add'} ${item.merchant} ${money(item.amount)}`}
-        className={cx('mt-0.5 w-7 h-7 rounded-lg border-2 inline-flex items-center justify-center shrink-0 transition', item.include ? 'bg-accent border-accent text-accent-fg' : 'border-line-strong')}
+        className={cx('mt-0.5 w-7 h-7 rounded-lg border-2 inline-flex items-center justify-center shrink-0 transition', item.include ? 'bg-brand border-brand text-brand-fg' : 'border-line-strong')}
       >
         {item.include && <Check size={16} strokeWidth={3} />}
       </button>
